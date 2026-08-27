@@ -64,7 +64,10 @@ def topics_from_metadata(bag: Path) -> dict[str, str]:
 
 
 def sample_messages(
-    bag: Path, wanted: set[str], max_messages: int
+    bag: Path,
+    wanted: set[str],
+    max_messages: int,
+    required_tf_paths: tuple[tuple[str, str], ...] = (),
 ) -> tuple[dict[str, Any], set[tuple[str, str]], bool, str | None]:
     """Read bounded samples. Failure is advisory because storage plugins vary."""
     try:
@@ -101,7 +104,9 @@ def sample_messages(
                 message = deserialize_message(payload, resolved_types[topic])
                 for transform in message.transforms:
                     tf_edges.add((transform.header.frame_id.lstrip("/"), transform.child_frame_id.lstrip("/")))
-            if wanted.issubset(samples) and len(tf_edges) >= 3:
+            if wanted.issubset(samples) and tf_paths_connected(
+                tf_edges, required_tf_paths
+            ):
                 break
         return samples, tf_edges, monotonic, None
     except Exception as error:  # storage/plugin failures should still yield topic checks
@@ -126,6 +131,27 @@ def connected(edges: set[tuple[str, str]], start: str, goal: str) -> bool:
     return False
 
 
+def connected_component(edges: set[tuple[str, str]], start: str) -> set[str]:
+    graph: dict[str, set[str]] = collections.defaultdict(set)
+    for parent, child in edges:
+        graph[parent].add(child)
+        graph[child].add(parent)
+    queue = collections.deque([start.lstrip("/")])
+    seen = set(queue)
+    while queue:
+        node = queue.popleft()
+        for neighbor in graph[node] - seen:
+            seen.add(neighbor)
+            queue.append(neighbor)
+    return seen
+
+
+def tf_paths_connected(
+    edges: set[tuple[str, str]], paths: tuple[tuple[str, str], ...]
+) -> bool:
+    return all(connected(edges, source, target) for source, target in paths)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bag", required=True, type=Path)
@@ -140,6 +166,7 @@ def main() -> int:
 
     config = load_config(args.dataset)
     topics_cfg = config["topics"]
+    frames = config["frames"]
     topics = topics_from_metadata(args.bag)
     if not topics:
         report.warn("metadata.yaml unavailable; topic type checks will use the reader only")
@@ -158,7 +185,13 @@ def main() -> int:
             report.ok(f"{key} topic: {topic}")
 
     wanted = {topics_cfg[key] for key in required}
-    samples, tf_edges, monotonic, reader_error = sample_messages(args.bag, wanted, args.max_messages)
+    required_tf_paths = (
+        (frames["map"], frames["robot"]),
+        (frames["robot"], frames["sensor"]),
+    )
+    samples, tf_edges, monotonic, reader_error = sample_messages(
+        args.bag, wanted, args.max_messages, required_tf_paths
+    )
     if reader_error:
         report.warn(f"bounded message inspection incomplete: {reader_error}")
 
@@ -179,7 +212,6 @@ def main() -> int:
     else:
         report.ok(f"CameraInfo: {camera_info.width}x{camera_info.height}")
 
-    frames = config["frames"]
     for source, target, label in [
         (frames["map"], frames["robot"], "map/robot TF"),
         (frames["robot"], frames["sensor"], "camera optical TF"),
@@ -190,6 +222,11 @@ def main() -> int:
             report.ok(label)
         else:
             report.fail(f"{label} missing ({source} -> {target})")
+            component = sorted(connected_component(tf_edges, source))
+            preview = ", ".join(component[:12])
+            if len(component) > 12:
+                preview += f", ... ({len(component)} frames)"
+            report.warn(f"sampled component from {source}: {preview}")
 
     if monotonic:
         report.ok("sampled timestamps monotonically increasing")

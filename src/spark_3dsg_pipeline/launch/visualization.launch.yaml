@@ -13,4 +13,4 @@ launch:
       pkg: rviz2
       exec: rviz2
       name: rviz
-      args: -d $(find-pkg-share spark_dsg_pipeline)/rviz/scene_graph.rviz
+      args: -d $(find-pkg-share spark_3dsg_pipeline)/rviz/scene_graph.rviz

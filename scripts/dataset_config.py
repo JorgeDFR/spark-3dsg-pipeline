@@ -27,15 +27,15 @@ def config_directory() -> Path:
     explicit = os.environ.get("PIPELINE_DATASET_CONFIG_DIR")
     candidates = [
         Path(explicit) if explicit else None,
-        Path("/opt/spark_pipeline/ros_ws/src/spark_dsg_pipeline/config/datasets"),
-        Path("/opt/ros_ws/install/share/spark_dsg_pipeline/config/datasets"),
+        Path("/home/spark/ros_ws/src/spark_3dsg_pipeline/config/datasets"),
+        Path("/home/spark/ros_ws/install/share/spark_3dsg_pipeline/config/datasets"),
         Path(__file__).resolve().parents[1]
-        / "ros_ws/src/spark_dsg_pipeline/config/datasets",
+        / "src/spark_3dsg_pipeline/config/datasets",
     ]
     for candidate in candidates:
         if candidate and candidate.is_dir():
             return candidate
-    raise FileNotFoundError("could not locate spark_dsg_pipeline dataset configs")
+    raise FileNotFoundError("could not locate spark_3dsg_pipeline dataset configs")
 
 
 def resolve_config(name_or_path: str) -> Path:

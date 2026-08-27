@@ -1,0 +1,21 @@
+name: spot
+description: Public ADT4 Hamilton Spot bag, payload ZED RGB-D stream
+topics:
+  color: /hamilton/hamilton_zed/rgb/image_rect_color
+  depth: /hamilton/hamilton_zed/depth/depth_registered
+  camera_info: /hamilton/hamilton_zed/rgb/camera_info
+  instances: /input/semantic/instances
+  labelspace: /input/semantic/labelspace
+  tf: /tf
+  tf_static: /tf_static
+frames:
+  map: hamilton/map
+  odom: hamilton/odom
+  robot: hamilton/base_link
+  sensor: hamilton_zed_left_camera_optical_frame
+depth_scale: 1.0
+depth_encodings: [32FC1]
+use_sim_time: true
+semantics_source: online
+mapper_overlay: empty.yaml
+playback_rate: 1.0

@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-dataset=custom_rgbd
+dataset=spot
 bag=
 run_id=
 rate=
 skip_validation=false
+spark_home="${HOME:-/home/spark}"
+pipeline_root="${PIPELINE_ROOT:-$spark_home/spark-3dsg-pipeline}"
+ros_ws="${ROS_WS:-$spark_home/ros_ws}"
+dataset_config="$pipeline_root/scripts/dataset_config.py"
 
 while (($#)); do
   case "$1" in
@@ -19,16 +23,16 @@ while (($#)); do
 done
 
 [[ -n "$bag" ]] || { echo "--bag is required" >&2; exit 2; }
-config_path=$(python3 /opt/spark_pipeline/scripts/dataset_config.py "$dataset" --path)
-dataset_name=$(python3 /opt/spark_pipeline/scripts/dataset_config.py "$dataset" --get name)
-semantics_source=$(python3 /opt/spark_pipeline/scripts/dataset_config.py "$dataset" --get semantics_source)
+config_path=$(python3 "$dataset_config" "$dataset" --path)
+dataset_name=$(python3 "$dataset_config" "$dataset" --get name)
+semantics_source=$(python3 "$dataset_config" "$dataset" --get semantics_source)
 
 if [[ "$skip_validation" != true ]]; then
-  python3 /opt/spark_pipeline/scripts/validate_bag.py --bag "$bag" --dataset "$dataset"
+  python3 "$pipeline_root/scripts/validate_bag.py" --bag "$bag" --dataset "$dataset"
 fi
 
 if [[ "$semantics_source" == online ]]; then
-  model=/models/semantic_inference/yoloe-26m-seg.pt
+  model="$spark_home/models/semantic_inference/yoloe-26m-seg.pt"
   [[ -f "$model" ]] || {
     echo "online semantics requires $model; run make models PROFILE=gpu" >&2
     exit 2
@@ -43,20 +47,20 @@ if [[ -z "$run_id" ]]; then
 fi
 [[ "$run_id" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "unsafe run id: $run_id" >&2; exit 2; }
 
-run_dir="/output/$run_id"
+run_dir="$spark_home/output/$run_id"
 if [[ -e "$run_dir" ]]; then
   echo "output already exists: $run_dir (choose --run-id)" >&2
   exit 2
 fi
 mkdir -p "$run_dir/logs" "$run_dir/upstream"
 cp "$config_path" "$run_dir/dataset.yaml"
-cp /opt/spark_pipeline/dependencies/locks/adt4.lock.repos "$run_dir/adt4.lock.repos"
+cp "$pipeline_root/dependencies/locks/adt4.lock.repos" "$run_dir/adt4.lock.repos"
 
-map_frame=$(python3 /opt/spark_pipeline/scripts/dataset_config.py "$dataset" --get frames.map)
-odom_frame=$(python3 /opt/spark_pipeline/scripts/dataset_config.py "$dataset" --get frames.odom)
-robot_frame=$(python3 /opt/spark_pipeline/scripts/dataset_config.py "$dataset" --get frames.robot)
-sensor_frame=$(python3 /opt/spark_pipeline/scripts/dataset_config.py "$dataset" --get frames.sensor)
-mapper_overlay=$(python3 /opt/spark_pipeline/scripts/dataset_config.py "$dataset" --get mapper_overlay)
+map_frame=$(python3 "$dataset_config" "$dataset" --get frames.map)
+odom_frame=$(python3 "$dataset_config" "$dataset" --get frames.odom)
+robot_frame=$(python3 "$dataset_config" "$dataset" --get frames.robot)
+sensor_frame=$(python3 "$dataset_config" "$dataset" --get frames.sensor)
+mapper_overlay=$(python3 "$dataset_config" "$dataset" --get mapper_overlay)
 
 pipeline_pid=
 cleanup() {
@@ -67,7 +71,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-ros2 launch spark_dsg_pipeline pipeline.launch.yaml \
+ros2 launch spark_3dsg_pipeline pipeline.launch.yaml \
   use_sim_time:=true \
   start_perception:="$start_perception" \
   output_dir:="$run_dir/upstream" \
@@ -75,7 +79,7 @@ ros2 launch spark_dsg_pipeline pipeline.launch.yaml \
   odom_frame:="$odom_frame" \
   robot_frame:="$robot_frame" \
   sensor_frame:="$sensor_frame" \
-  overlay_path:="/opt/ros_ws/install/spark_dsg_pipeline/share/spark_dsg_pipeline/config/hydra/$mapper_overlay" \
+  overlay_path:="$ros_ws/install/spark_3dsg_pipeline/share/spark_3dsg_pipeline/config/hydra/$mapper_overlay" \
   exit_after_clock:=true \
   >"$run_dir/logs/pipeline.log" 2>&1 &
 pipeline_pid=$!
@@ -96,7 +100,7 @@ done
 
 bag_args=("$bag" "$dataset")
 [[ -n "$rate" ]] && bag_args+=("$rate")
-/opt/spark_pipeline/scripts/run_bag.sh "${bag_args[@]}" 2>&1 | tee "$run_dir/logs/bag.log"
+"$pipeline_root/scripts/run_bag.sh" "${bag_args[@]}" 2>&1 | tee "$run_dir/logs/bag.log"
 
 # exit_after_clock normally stops the pipeline. Bound the final flush, then ask
 # for a clean interrupt so experiment serializers run.
@@ -107,7 +111,7 @@ done
 cleanup
 pipeline_pid=
 
-/opt/spark_pipeline/scripts/save_dsg.sh "$run_dir"
+"$pipeline_root/scripts/save_dsg.sh" "$run_dir"
 
 PIPELINE_RUN_DIR="$run_dir" PIPELINE_DATASET="$dataset_name" PIPELINE_BAG="$bag" \
 python3 - <<'PY'

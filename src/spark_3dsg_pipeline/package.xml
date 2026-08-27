@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>spark_dsg_pipeline</name>
+  <name>spark_3dsg_pipeline</name>
   <version>0.1.0</version>
   <description>Dockerized launch and configuration integration for Hydra/Khronos.</description>
   <maintainer email="maintainers@example.invalid">spark-3dsg-pipeline maintainers</maintainer>

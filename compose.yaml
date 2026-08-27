@@ -7,11 +7,12 @@ x-common: &common
     ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
     RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
   volumes:
-    - ${DATA_DIR:-./data}:/data:ro
-    - ${MODEL_DIR:-./models}:/models
-    - ${OUTPUT_DIR:-./output}:/output
-    - spark-cache:/cache
-  working_dir: /opt/spark_pipeline
+    - ${DATA_DIR:-./data}:/home/spark/data:ro
+    - ${MODEL_DIR:-./models}:/home/spark/models
+    - ${OUTPUT_DIR:-./output}:/home/spark/output
+    - ${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:/home/spark/ros_ws/src/spark_3dsg_pipeline:ro
+    - spark-cache:/home/spark/.cache
+  working_dir: /home/spark/spark-3dsg-pipeline
   stdin_open: true
   tty: true
 
@@ -23,6 +24,9 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.core
+      args:
+        USER_UID: ${HOST_UID:-1000}
+        USER_GID: ${HOST_GID:-1000}
 
   pipeline:
     <<: *common
@@ -32,6 +36,20 @@ services:
       context: .
       dockerfile: docker/Dockerfile.gpu
     gpus: all
+
+  data-setup:
+    profiles: [tools]
+    image: spark-3dsg-core:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.core
+      args:
+        USER_UID: ${HOST_UID:-1000}
+        USER_GID: ${HOST_GID:-1000}
+    volumes:
+      - ${DATA_DIR:-./data}:/home/spark/data
+    working_dir: /home/spark/spark-3dsg-pipeline
+    command: ["/home/spark/spark-3dsg-pipeline/scripts/prepare_example_bags.py"]
 
   # Stable v2 service boundary; Make intentionally blocks building it in v1.
   daaam:
@@ -53,12 +71,13 @@ services:
       DISPLAY: ${DISPLAY:-:0}
       QT_X11_NO_MITSHM: "1"
     volumes:
-      - ${DATA_DIR:-./data}:/data:ro
-      - ${MODEL_DIR:-./models}:/models
-      - ${OUTPUT_DIR:-./output}:/output
-      - spark-cache:/cache
+      - ${DATA_DIR:-./data}:/home/spark/data:ro
+      - ${MODEL_DIR:-./models}:/home/spark/models
+      - ${OUTPUT_DIR:-./output}:/home/spark/output
+      - ${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:/home/spark/ros_ws/src/spark_3dsg_pipeline:ro
+      - spark-cache:/home/spark/.cache
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    command: ["rviz2", "-d", "/opt/ros_ws/install/spark_dsg_pipeline/share/spark_dsg_pipeline/rviz/scene_graph.rviz"]
+    command: ["rviz2", "-d", "/home/spark/ros_ws/install/spark_3dsg_pipeline/share/spark_3dsg_pipeline/rviz/scene_graph.rviz"]
     gpus: all
 
 volumes:

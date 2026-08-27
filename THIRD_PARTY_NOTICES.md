@@ -17,6 +17,7 @@ This integration fetches source at image-build time; it does not vendor upstream
 | MIT-SPARK/pose_graph_tools | pose-graph messages/tools | BSD |
 | MIT-SPARK/Spatial-Hash | spatial indexing | BSD-3-Clause |
 | MIT-SPARK/TEASER-plusplus | registration | MIT |
+| Ternaris/rosbags | ROS 1 to ROS 2 example-bag conversion | Apache-2.0 |
 
 YOLOE weights are downloaded separately from Ultralytics Assets. Code, weights, and datasets may have terms independent of this repository. Review the [Ultralytics licensing documentation](https://www.ultralytics.com/license) and the terms applicable to your use before downloading or deploying a model.
 

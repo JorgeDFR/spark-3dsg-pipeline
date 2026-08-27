@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-workspace="${1:-/opt/ros_ws}"
+workspace="${1:-${ROS_WS:-/home/spark/ros_ws}}"
+
+# ROS-generated environment hooks probe optional variables such as
+# AMENT_TRACE_SETUP_FILES and are not safe to source while nounset is enabled.
+set +u
 source /opt/ros/jazzy/setup.bash
+set -u
 cd "$workspace"
 
 colcon build \
   --merge-install \
+  --symlink-install \
   --event-handlers console_cohesion+ \
   --cmake-args \
     --no-warn-unused-cli \

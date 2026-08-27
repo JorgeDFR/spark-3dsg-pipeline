@@ -21,28 +21,30 @@ The repository provides the Docker/ROS integration and CPU-testable tooling. A f
 
 Do not install ROS, CUDA Toolkit, colcon, GTSAM, or Python ML packages on the host.
 
+## Example ROS bags
+
+Download and preparation instructions for the public Spot and uHumans2 examples are maintained in [data/README.md](data/README.md). Prepare an example before following the quick start below.
+
 ## Quick start
 
 ```bash
 cp .env.example .env
 make build PROFILE=gpu
 make models PROFILE=gpu
-make validate-bag PROFILE=gpu DATASET=spot BAG=/data/spot
-make run PROFILE=gpu DATASET=spot BAG=/data/spot
-make inspect DSG=/output/<run-id>/dsg.json
+make validate-bag PROFILE=gpu BAG=/home/spark/data/spot
+make run PROFILE=gpu BAG=/home/spark/data/spot
+make inspect DSG=/home/spark/output/<run-id>/dsg.json
 ```
 
-`BAG` and `DSG` are container paths. The defaults mount `./data` read-only at `/data`, `./models` at `/models`, and `./output` at `/output`. Change the host-side paths in `.env` for external storage.
+`BAG` and `DSG` are container paths. The defaults mount `./data` read-only at `/home/spark/data`, `./models` at `/home/spark/models`, `./output` at `/home/spark/output`, and the persistent cache volume at `/home/spark/.cache`. The project is installed at `/home/spark/spark-3dsg-pipeline`; the image's internal upstream workspace is `/home/spark/ros_ws`. Change the host-side paths in `.env` for external storage.
 
-For a CPU-only uHumans2 bag with recorded ground-truth semantics:
+Containers run as the non-root `spark` user. Its UID and GID are set at image build time from `HOST_UID` and `HOST_GID` in `.env`, so files written under the bind-mounted model and output directories belong to the host user. The example values are `1000`; if your account differs, use `id -u` and `id -g` to set the correct values before building. Rebuild the images after changing either value.
 
-```bash
-make build PROFILE=core
-make validate-bag PROFILE=core DATASET=uhumans2 BAG=/data/uhumans2
-make run PROFILE=core DATASET=uhumans2 BAG=/data/uhumans2
-```
+## Editing the integration package
 
-Every run creates `/output/<UTC timestamp>-<dataset>/`. The run wrapper records the resolved dataset configuration, upstream lock hash, command, and logs. Hydra/Khronos are asked to stop when simulated time ends; the wrapper then normalizes upstream output names to the output contract where possible and fails if no DSG JSON was produced.
+The repository-owned ROS package is [src/spark_3dsg_pipeline](src/spark_3dsg_pipeline); the repository itself does not imitate a complete ROS workspace. Compose mounts this package at `/home/spark/ros_ws/src/spark_3dsg_pipeline` over the copy used during the image build. The workspace is built with `colcon --symlink-install`, so edits to existing launch, configuration, and RViz files are visible in newly started containers without rebuilding the image. Rebuild after changing `package.xml`, `CMakeLists.txt`, or compiled dependencies.
+
+Every run creates `/home/spark/output/<UTC timestamp>-<dataset>/`. The run wrapper records the resolved dataset configuration, upstream lock hash, command, and logs. Hydra/Khronos are asked to stop when simulated time ends; the wrapper then normalizes upstream output names to the output contract where possible and fails if no DSG JSON was produced.
 
 ## Commands
 
@@ -51,10 +53,11 @@ Run `make help` for the complete interface. Common commands are:
 ```bash
 make build PROFILE=core|gpu
 make models PROFILE=gpu
+make prepare-data
 make shell PROFILE=core|gpu
-make validate-bag PROFILE=core DATASET=custom_rgbd BAG=/data/example
-make run PROFILE=gpu DATASET=spot BAG=/data/spot
-make inspect DSG=/output/run/dsg.json
+make validate-bag PROFILE=core DATASET=custom_rgbd BAG=/home/spark/data/example
+make run PROFILE=gpu DATASET=spot BAG=/home/spark/data/spot
+make inspect DSG=/home/spark/output/run/dsg.json
 make test
 make lint
 ```
@@ -72,8 +75,8 @@ The normalized interface and frame requirements are in [docs/INPUT_CONTRACT.md](
 The graph inspection command supports human-readable and machine-readable output:
 
 ```bash
-make inspect DSG=/output/run/dsg.json
-make inspect DSG=/output/run/dsg.json INSPECT_ARGS=--json
+make inspect DSG=/home/spark/output/run/dsg.json
+make inspect DSG=/home/spark/output/run/dsg.json INSPECT_ARGS=--json
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATASETS.md](docs/DATASETS.md), and [docs/DEBUGGING.md](docs/DEBUGGING.md) before running a large bag.

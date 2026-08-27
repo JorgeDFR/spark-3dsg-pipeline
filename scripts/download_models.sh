@@ -11,7 +11,7 @@ if [[ "$profile" != "gpu" ]]; then
   exit 2
 fi
 
-model_dir=/models/semantic_inference
+model_dir="${HOME:-/home/spark}/models/semantic_inference"
 filename=yoloe-26m-seg.pt
 url=https://github.com/ultralytics/assets/releases/download/v8.4.0/yoloe-26m-seg.pt
 sha256=585f5ec9028fd358035da8d860c27c56be285a795cba2076fba536a4391c2c83

@@ -2,19 +2,19 @@
 launch:
   - arg: {name: use_sim_time, default: 'true', description: Use bag clock}
   - arg: {name: start_perception, default: 'false', description: Run online YOLOE frontend}
-  - arg: {name: output_dir, default: /output/manual, description: Per-run output directory}
+  - arg: {name: output_dir, default: /home/spark/output/manual, description: Per-run output directory}
   - arg: {name: map_frame, default: map}
   - arg: {name: odom_frame, default: odom}
   - arg: {name: robot_frame, default: base_link}
   - arg: {name: sensor_frame, default: camera_color_optical_frame}
   - arg: {name: exit_after_clock, default: 'true'}
-  - arg: {name: config_path, default: $(find-pkg-share spark_dsg_pipeline)/config/hydra/default.yaml}
-  - arg: {name: overlay_path, default: $(find-pkg-share spark_dsg_pipeline)/config/hydra/empty.yaml}
-  - arg: {name: perception_config, default: $(find-pkg-share spark_dsg_pipeline)/config/perception/yoloe.yaml}
+  - arg: {name: config_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/hydra/default.yaml}
+  - arg: {name: overlay_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/hydra/empty.yaml}
+  - arg: {name: perception_config, default: $(find-pkg-share spark_3dsg_pipeline)/config/perception/yoloe.yaml}
 
   - include:
       if: $(var start_perception)
-      file: $(find-pkg-share spark_dsg_pipeline)/launch/perception.launch.yaml
+      file: $(find-pkg-share spark_3dsg_pipeline)/launch/perception.launch.yaml
       arg:
         - {name: use_sim_time, value: $(var use_sim_time)}
         - {name: config_path, value: $(var perception_config)}

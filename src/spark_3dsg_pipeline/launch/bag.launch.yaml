@@ -11,7 +11,7 @@ launch:
       pkg: rosbag2_transport
       exec: play
       name: bag_player
-      args: $(var bag) --clock --rate $(var rate) --qos-profile-overrides-path $(find-pkg-share spark_dsg_pipeline)/config/tf_qos.yaml
+      args: $(var bag) --clock --rate $(var rate) --qos-profile-overrides-path $(find-pkg-share spark_3dsg_pipeline)/config/tf_qos.yaml
       remap:
         - {from: $(var color_topic), to: /input/color/image_raw}
         - {from: $(var depth_topic), to: /input/depth/image_rect}

@@ -8,6 +8,8 @@ This repository integrates public MIT-SPARK software to create 3D Dynamic Scene 
 
 Compilation, ROS execution, integration tests, and runtime dependency installation must happen inside Docker. Repository-only Python tests may also be validated in an ignored local `.venv`. Do not instruct users to install ROS, CUDA libraries, Python runtime dependencies, CMake packages, or colcon dependencies on the host. Host requirements are limited to Docker and, for GPU execution, an NVIDIA driver plus NVIDIA Container Toolkit.
 
+Runtime containers must default to the non-root `spark` user created from `HOST_UID` and `HOST_GID`. Root is limited to image-build steps and explicit maintenance operations.
+
 ## Upstream source policy
 
 - Do not modify vendored or imported upstream projects directly.
@@ -30,4 +32,4 @@ Excluded from v1: Hydra-Multi, robot drivers, Spot SDK, Phoenix, planners, Herac
 
 ## Testing and outputs
 
-Every change must leave the Docker definitions buildable, tests passing, README commands accurate, and model/bag files untracked. A successful mapping run must produce a Spark-DSG JSON file under `/output`; tests validate graph contents programmatically and never require RViz.
+Every change must leave the Docker definitions buildable, tests passing, README commands accurate, and model/bag files untracked. A successful mapping run must produce a Spark-DSG JSON file under `/home/spark/output`; tests validate graph contents programmatically and never require RViz.

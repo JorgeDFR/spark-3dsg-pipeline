@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pipeline_root=/opt/spark_pipeline
+pipeline_root="${PIPELINE_ROOT:-/home/spark/spark-3dsg-pipeline}"
 source_manifest="$pipeline_root/dependencies/adt4-public.repos"
 destination="$pipeline_root/dependencies/locks/adt4.lock.repos"
 lock_workspace=$(mktemp -d)

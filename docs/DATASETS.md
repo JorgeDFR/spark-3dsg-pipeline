@@ -1,10 +1,10 @@
 # Datasets
 
-Adapters live in `ros_ws/src/spark_dsg_pipeline/config/datasets/` and contain only topic names, frame names, depth units, playback policy, and semantics source.
+Adapters live in `src/spark_3dsg_pipeline/config/datasets/` and contain only topic names, frame names, depth units, playback policy, and semantics source.
 
 ## Spot
 
-`spot.yaml` is intended for the hardware-free bag linked from the Awesome-DCIST-T4 README and follows its recorded `/<robot>/<robot>_zed/...` RGB-D topics. Spot payload/bag conventions have changed over time; run validation and adjust only this YAML if the downloaded snapshot differs. No Spot SDK or driver is required for playback.
+`spot.yaml` is the default adapter. It matches the Hamilton hardware-free bag linked from the Awesome-DCIST-T4 README: `/hamilton/hamilton_zed/...` RGB-D topics and the `hamilton/map`, `hamilton/odom`, and `hamilton/base_link` frame tree. No Spot SDK or driver is required for playback.
 
 ## uHumans2
 
@@ -14,4 +14,4 @@ Adapters live in `ros_ws/src/spark_dsg_pipeline/config/datasets/` and contain on
 
 Copy `custom_rgbd.yaml`, change its topics/frames/depth scale, then follow `CUSTOM_SENSOR.md`.
 
-Datasets and bags are never committed. Set `DATA_DIR` in `.env` and use `/data/...` in Make commands.
+Datasets and bags are never committed. Set `DATA_DIR` in `.env` and use `/home/spark/data/...` in Make commands. Public example download, preparation, validation, and execution instructions are centralized in [data/README.md](../data/README.md).

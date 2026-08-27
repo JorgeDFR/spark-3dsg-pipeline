@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd /opt/spark_pipeline
+cd "${PIPELINE_ROOT:-/home/spark/spark-3dsg-pipeline}"
 python3 -m compileall -q scripts tests
 
 while IFS= read -r script; do
@@ -25,5 +25,5 @@ for path in Path('dependencies/locks').glob('*.repos'):
         assert sha.fullmatch(entry['version']), f'{path}:{name}: floating revision'
 PY
 
-ros2 launch spark_dsg_pipeline pipeline.launch.yaml --show-args >/dev/null
+ros2 launch spark_3dsg_pipeline pipeline.launch.yaml --show-args >/dev/null
 echo "Lint checks passed"

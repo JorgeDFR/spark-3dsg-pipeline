@@ -1,6 +1,6 @@
 # Models
 
-Model weights are external, ignored by Git, and mounted at `/models`.
+Model weights are external, ignored by Git, and mounted at `/home/spark/models`.
 
 `make models PROFILE=gpu` downloads and verifies `semantic_inference/yoloe-26m-seg.pt`.
 
