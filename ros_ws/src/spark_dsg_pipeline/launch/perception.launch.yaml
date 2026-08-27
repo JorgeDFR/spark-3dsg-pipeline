@@ -1,0 +1,14 @@
+---
+launch:
+  - arg: {name: use_sim_time, default: 'true'}
+  - arg: {name: env_path, default: /opt/semantic_env}
+  - arg: {name: config_path, default: $(find-pkg-share spark_dsg_pipeline)/config/perception/yoloe.yaml}
+  - set_remap: {from: semantic/image_raw, to: /input/semantic/instances}
+  - set_remap: {from: labelspace, to: /input/semantic/labelspace}
+  - include:
+      file: $(find-pkg-share semantic_inference_ros)/launch/instance_segmentation.launch.yaml
+      arg:
+        - {name: env_path, value: $(var env_path)}
+        - {name: model_name, value: yoloe}
+        - {name: config_path, value: $(var config_path)}
+        - {name: image_topic, value: /input/color/image_raw}

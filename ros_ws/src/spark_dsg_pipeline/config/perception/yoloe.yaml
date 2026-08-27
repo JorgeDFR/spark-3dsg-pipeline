@@ -1,0 +1,39 @@
+---
+worker:
+  encoding: rgb8
+  queue_size: 1
+  min_separation_s: 0.1
+model:
+  instance_model:
+    type: yoloe
+    model_name: yoloe-26m-seg.pt
+    text_prompt:
+      - ignore
+      - chair
+      - cone
+      - bag
+      - table
+      - tree
+      - car
+      - van
+      - truck
+      - bus
+      - bicycle
+      - door
+      - pole
+      - fence
+      - sign
+      - window
+      - bed
+      - box
+      - basket
+      - seating
+      - flag
+      - light
+      - trash
+      - clothes
+      - ball
+    confidence_threshold: 0.3
+    min_segmentation_size: 30
+visualize_semantic_img: false
+nickname: semantic_inference

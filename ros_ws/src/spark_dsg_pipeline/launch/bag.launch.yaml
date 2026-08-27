@@ -1,0 +1,20 @@
+---
+launch:
+  - arg: {name: bag, description: ROS 2 bag directory or MCAP file}
+  - arg: {name: rate, default: '1.0'}
+  - arg: {name: color_topic, default: /input/color/image_raw}
+  - arg: {name: depth_topic, default: /input/depth/image_rect}
+  - arg: {name: camera_info_topic, default: /input/color/camera_info}
+  - arg: {name: semantic_topic, default: /input/semantic/instances}
+  - arg: {name: labelspace_topic, default: /input/semantic/labelspace}
+  - node:
+      pkg: rosbag2_transport
+      exec: play
+      name: bag_player
+      args: $(var bag) --clock --rate $(var rate) --qos-profile-overrides-path $(find-pkg-share spark_dsg_pipeline)/config/tf_qos.yaml
+      remap:
+        - {from: $(var color_topic), to: /input/color/image_raw}
+        - {from: $(var depth_topic), to: /input/depth/image_rect}
+        - {from: $(var camera_info_topic), to: /input/color/camera_info}
+        - {from: $(var semantic_topic), to: /input/semantic/instances}
+        - {from: $(var labelspace_topic), to: /input/semantic/labelspace}

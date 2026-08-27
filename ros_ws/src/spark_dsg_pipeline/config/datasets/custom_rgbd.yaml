@@ -1,0 +1,21 @@
+name: custom_rgbd
+description: Template RGB-D bag with online instance segmentation
+topics:
+  color: /camera/color/image_raw
+  depth: /camera/aligned_depth_to_color/image_raw
+  camera_info: /camera/color/camera_info
+  instances: /input/semantic/instances
+  labelspace: /input/semantic/labelspace
+  tf: /tf
+  tf_static: /tf_static
+frames:
+  map: map
+  odom: odom
+  robot: base_link
+  sensor: camera_color_optical_frame
+depth_scale: 1000.0
+depth_encodings: [16UC1, 32FC1]
+use_sim_time: true
+semantics_source: online
+mapper_overlay: empty.yaml
+playback_rate: 1.0

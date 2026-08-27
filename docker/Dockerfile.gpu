@@ -1,0 +1,25 @@
+FROM spark-3dsg-core:local
+
+ARG TORCH_VERSION=2.7.0
+ARG TORCHVISION_VERSION=0.22.0
+ARG PYTORCH_INDEX=https://download.pytorch.org/whl/cu128
+
+ENV SEMANTIC_ENV=/opt/semantic_env \
+    SEMANTIC_INFERENCE_MODEL_DIR=/models/semantic_inference \
+    PATH=/opt/semantic_env/bin:${PATH}
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN python3 -m venv --system-site-packages ${SEMANTIC_ENV} \
+    && ${SEMANTIC_ENV}/bin/pip install --no-cache-dir --upgrade pip \
+    && ${SEMANTIC_ENV}/bin/pip install --no-cache-dir \
+         torch==${TORCH_VERSION} torchvision==${TORCHVISION_VERSION} --index-url ${PYTORCH_INDEX} \
+    && ${SEMANTIC_ENV}/bin/pip install --no-cache-dir /opt/ros_ws/src/spark_config \
+    && ${SEMANTIC_ENV}/bin/pip install --no-cache-dir \
+         --requirement /opt/spark_pipeline/dependencies/gpu.requirements.txt \
+    && ${SEMANTIC_ENV}/bin/pip install --no-cache-dir \
+         --no-deps /opt/ros_ws/src/semantic_inference/semantic_inference \
+    && ${SEMANTIC_ENV}/bin/python -c "import torch, ultralytics, semantic_inference"
+
+ENTRYPOINT ["/opt/spark_pipeline/docker/ros_entrypoint.sh"]
+CMD ["bash"]

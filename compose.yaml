@@ -1,0 +1,65 @@
+name: spark-3dsg-pipeline
+
+x-common: &common
+  network_mode: host
+  ipc: host
+  environment:
+    ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
+    RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+  volumes:
+    - ${DATA_DIR:-./data}:/data:ro
+    - ${MODEL_DIR:-./models}:/models
+    - ${OUTPUT_DIR:-./output}:/output
+    - spark-cache:/cache
+  working_dir: /opt/spark_pipeline
+  stdin_open: true
+  tty: true
+
+services:
+  core:
+    <<: *common
+    profiles: [core]
+    image: spark-3dsg-core:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.core
+
+  pipeline:
+    <<: *common
+    profiles: [gpu]
+    image: spark-3dsg-gpu:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gpu
+    gpus: all
+
+  # Stable v2 service boundary; Make intentionally blocks building it in v1.
+  daaam:
+    <<: *common
+    profiles: [daaam]
+    image: spark-3dsg-daaam:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.daaam
+    gpus: all
+
+  rviz:
+    <<: *common
+    profiles: [rviz]
+    image: spark-3dsg-gpu:local
+    environment:
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
+      RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+      DISPLAY: ${DISPLAY:-:0}
+      QT_X11_NO_MITSHM: "1"
+    volumes:
+      - ${DATA_DIR:-./data}:/data:ro
+      - ${MODEL_DIR:-./models}:/models
+      - ${OUTPUT_DIR:-./output}:/output
+      - spark-cache:/cache
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    command: ["rviz2", "-d", "/opt/ros_ws/install/spark_dsg_pipeline/share/spark_dsg_pipeline/rviz/scene_graph.rviz"]
+    gpus: all
+
+volumes:
+  spark-cache:

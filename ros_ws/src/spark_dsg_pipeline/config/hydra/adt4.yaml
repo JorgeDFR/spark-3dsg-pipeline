@@ -1,0 +1,24 @@
+---
+# Compact provenance view of the mapping configuration at the ADT4 reference.
+paths: [khronos, khronos_ros]
+labelspace: {type: from_msg}
+input:
+  type: RosInput
+  max_receiver_queue_size: 1
+  inputs:
+    camera:
+      receiver: {type: InstanceImageReceiver, queue_size: 30}
+      sensor: {type: camera_info, min_range: 0.2, max_range: 10.0, extrinsics: {type: ros}}
+active_window:
+  type: ActiveWindow
+  object_detector: {type: InstanceForwarding, min_cluster_size: 30, max_range: 10.0, min_range: 0.05}
+  tracker: {type: MaxIouTracker, track_by: pixels, min_semantic_iou: 0.25, min_cross_iou: 0.1, min_num_observations: 10}
+  object_extractor: {type: MeshObjectExtractor, min_object_volume: 0.005, max_object_volume: 100.0}
+frontend:
+  type: GraphBuilder
+  graph_updater: {layer_updates: {OBJECTS: {prefix: O}}}
+  traversability_places:
+    type: traversability
+    layer: MESH_PLACES
+    estimator: {type: HeightTraversabilityEstimator, height_below: 0.0, height_above: 0.5}
+    clustering: {type: RegionGrowingTraversabilityClustering, max_radius: 4.0, num_orientation_bins: 20}

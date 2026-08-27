@@ -1,0 +1,21 @@
+name: spot
+description: Public ADT4 Spot bag, payload ZED RGB-D stream
+topics:
+  color: /spot/spot_zed/rgb/image_rect_color
+  depth: /spot/spot_zed/depth/depth_registered
+  camera_info: /spot/spot_zed/rgb/camera_info
+  instances: /input/semantic/instances
+  labelspace: /input/semantic/labelspace
+  tf: /tf
+  tf_static: /tf_static
+frames:
+  map: spot/map
+  odom: spot/odom
+  robot: spot/base_link
+  sensor: spot_zed_left_camera_optical_frame
+depth_scale: 1000.0
+depth_encodings: [16UC1, 32FC1]
+use_sim_time: true
+semantics_source: online
+mapper_overlay: empty.yaml
+playback_rate: 1.0

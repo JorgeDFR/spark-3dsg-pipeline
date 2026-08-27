@@ -1,0 +1,33 @@
+# Project rules
+
+## Purpose
+
+This repository integrates public MIT-SPARK software to create 3D Dynamic Scene Graphs. It does not implement its own SLAM, TSDF, tracking, or DSG framework.
+
+## Environment
+
+Compilation, ROS execution, integration tests, and runtime dependency installation must happen inside Docker. Repository-only Python tests may also be validated in an ignored local `.venv`. Do not instruct users to install ROS, CUDA libraries, Python runtime dependencies, CMake packages, or colcon dependencies on the host. Host requirements are limited to Docker and, for GPU execution, an NVIDIA driver plus NVIDIA Container Toolkit.
+
+## Upstream source policy
+
+- Do not modify vendored or imported upstream projects directly.
+- Fetch dependencies with vcstool over HTTPS.
+- Builds must use exact SHA locks from `dependencies/locks/`.
+- Never put `main`, `master`, `develop`, or another floating ref in a lock file.
+- The v1 Hydra lock is a public monorepo snapshot that already contains the
+  `hydra_ros` packages. Do not also import the split Hydra-ROS repository into
+  that workspace; migrate the entire compatible dependency set together.
+- Prefer launch/configuration composition over upstream source changes.
+- Any unavoidable upstream change must be an explicit patch under `patches/`, with its reason, applicable upstream commit, upstream issue/PR, and removal condition documented.
+
+## Scope
+
+Required in v1: Hydra, Hydra-ROS, Khronos, Spark-DSG, and semantic_inference.
+
+Optional/future: DAAAM, DAAAM-ROS, and ROMAN.
+
+Excluded from v1: Hydra-Multi, robot drivers, Spot SDK, Phoenix, planners, Heracles, speech/NLU, and base-station infrastructure.
+
+## Testing and outputs
+
+Every change must leave the Docker definitions buildable, tests passing, README commands accurate, and model/bag files untracked. A successful mapping run must produce a Spark-DSG JSON file under `/output`; tests validate graph contents programmatically and never require RViz.

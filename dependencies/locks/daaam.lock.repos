@@ -1,0 +1,19 @@
+# Reference-only v2 lock captured 2026-08-27; not consumed by v1 images.
+repositories:
+  daaam: {type: git, url: https://github.com/MIT-SPARK/DAAAM.git, version: ebd6e3b89763849eb7bce7f75e8d08550ea7344a}
+  daaam_ros: {type: git, url: https://github.com/MIT-SPARK/DAAAM-ROS.git, version: b80964647efefc66fbfe887c96cc19269c3504dc}
+  hydra: {type: git, url: https://github.com/MIT-SPARK/Hydra.git, version: 2e35bcb6432f82be2cae036835e0faa96f25c3d7}
+  hydra_ros: {type: git, url: https://github.com/MIT-SPARK/Hydra-ROS.git, version: d948a6694cb5957fdb9527445407dc24a36fa1a1}
+  spark_dsg: {type: git, url: https://github.com/MIT-SPARK/Spark-DSG.git, version: 1fd2decece37de9dc0971619273a0c88cfe4a63c}
+  khronos: {type: git, url: https://github.com/nicogorlo/Khronos.git, version: 3b961d6c6b43ef7a351c103190e3aec21ae8cb95}
+  config_utilities: {type: git, url: https://github.com/MIT-SPARK/config_utilities.git, version: 1df5f6b5444f8823232cfdb1cef69c2bd41ada96}
+  ianvs: {type: git, url: https://github.com/MIT-SPARK/Ianvs.git, version: 36f09956de88b44a579abe17bbfdcd0cc74eb929}
+  kimera_pgmo: {type: git, url: https://github.com/MIT-SPARK/Kimera-PGMO.git, version: fb45b27543813f314df513e7b8c90e28dce7de8b}
+  kimera_rpgo: {type: git, url: https://github.com/MIT-SPARK/Kimera-RPGO.git, version: f1fee0900ef6825bf76304685668235cf5dd008d}
+  pose_graph_tools: {type: git, url: https://github.com/MIT-SPARK/pose_graph_tools.git, version: 965dfe864487be9040195c598fd89718563c348c}
+  semantic_inference: {type: git, url: https://github.com/MIT-SPARK/semantic_inference.git, version: 00b05c1f4867ab0466e78154a781d1114e488a2b}
+  spatial_hash: {type: git, url: https://github.com/MIT-SPARK/Spatial-Hash.git, version: 8045892f34978d78870d806a50f8e5aefdbe52fc}
+  teaser_plusplus: {type: git, url: https://github.com/MIT-SPARK/TEASER-plusplus.git, version: 52a9c52ee7d4c838c5e8a75458c33178be5bfb70}
+  gtsam: {type: git, url: https://github.com/borglab/gtsam.git, version: 3985b08a8237b072ae977028867a5f2fb9994384}
+  small_gicp: {type: git, url: https://github.com/koide3/small_gicp.git, version: aea131352e0d362d3e579a334c477cfafa5ee5eb}
+  vision_opencv: {type: git, url: https://github.com/ros-perception/vision_opencv.git, version: 50f6f1feccc65dd2ef87f863cb812a8aa0789062}

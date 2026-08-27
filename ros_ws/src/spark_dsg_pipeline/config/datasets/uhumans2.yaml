@@ -1,0 +1,21 @@
+name: uhumans2
+description: uHumans2 bag with ground-truth semantics
+topics:
+  color: /tesse/left_cam/rgb/image_raw
+  depth: /tesse/depth_cam/mono/image_raw
+  camera_info: /tesse/left_cam/camera_info
+  instances: /tesse/seg_cam/converted/image_raw
+  labelspace: /input/semantic/labelspace
+  tf: /tf
+  tf_static: /tf_static
+frames:
+  map: map
+  odom: odom
+  robot: base_link_gt
+  sensor: left_cam
+depth_scale: 1.0
+depth_encodings: [16UC1, 32FC1]
+use_sim_time: true
+semantics_source: precomputed
+mapper_overlay: uhumans2.yaml
+playback_rate: 1.0

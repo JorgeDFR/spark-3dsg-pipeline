@@ -1,0 +1,55 @@
+FROM osrf/ros:jazzy-desktop-full
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV ROS_DISTRO=jazzy \
+    ROS_WS=/opt/ros_ws \
+    PIPELINE_ROOT=/opt/spark_pipeline \
+    PYTHONUNBUFFERED=1
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential \
+      ca-certificates \
+      curl \
+      git \
+      libcli11-dev \
+      libeigen3-dev \
+      libgoogle-glog-dev \
+      libzmq3-dev \
+      nlohmann-json3-dev \
+      pipx \
+      python3-pip \
+      python3-pytest \
+      python3-venv \
+      python3-vcstool \
+      python3-yaml \
+      ros-dev-tools \
+      ros-jazzy-rmw-fastrtps-cpp \
+      ros-jazzy-rosbag2-storage-mcap \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN rosdep init 2>/dev/null || true && rosdep update --rosdistro jazzy
+
+WORKDIR ${ROS_WS}
+COPY dependencies/locks/adt4.lock.repos /tmp/adt4.lock.repos
+RUN mkdir -p src && vcs import src --workers 1 < /tmp/adt4.lock.repos
+
+COPY ros_ws/src/spark_dsg_pipeline src/spark_dsg_pipeline
+
+RUN apt-get update \
+    && rosdep install --from-paths src --ignore-src -r -y --rosdistro jazzy \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY scripts/build_workspace.sh /tmp/build_workspace.sh
+RUN /tmp/build_workspace.sh ${ROS_WS}
+
+WORKDIR ${PIPELINE_ROOT}
+COPY . ${PIPELINE_ROOT}
+
+RUN chmod +x docker/*.sh scripts/*.sh scripts/*.py \
+    && python3 -c "import yaml" \
+    && bash -lc "source ${ROS_WS}/install/setup.bash && ros2 pkg prefix hydra_ros && ros2 pkg prefix khronos_ros && python3 -c 'import spark_dsg'"
+
+ENTRYPOINT ["/opt/spark_pipeline/docker/ros_entrypoint.sh"]
+CMD ["bash"]
