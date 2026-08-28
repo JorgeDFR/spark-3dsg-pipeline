@@ -8,8 +8,7 @@ launch:
   - arg: {name: robot_frame, default: base_link}
   - arg: {name: sensor_frame, default: camera_color_optical_frame}
   - arg: {name: exit_after_clock, default: 'true'}
-  - arg: {name: hydra_config_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/hydra/default.yaml}
-  - arg: {name: hydra_overlay_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/hydra/empty.yaml}
+  - arg: {name: hydra_config_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/hydra/adt4.yaml}
   - arg: {name: perception_config_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/perception/yoloe.yaml}
 
   - include:
@@ -34,7 +33,6 @@ launch:
         - {from: ~/labelspace, to: /input/semantic/labelspace}
       args: >
         --config-utilities-file $(var hydra_config_path)
-        --config-utilities-file $(var hydra_overlay_path)
         --config-utilities-yaml {exit_after_clock: $(var exit_after_clock), log_path: $(var output_dir), output: {use_timestamp: false, overwrite: true}}
         --config-utilities-yaml {robot_id: 0, map_frame: $(var map_frame), odom_frame: $(var odom_frame), robot_frame: $(var robot_frame)}
         --config-utilities-yaml {input: {inputs: {camera: {sensor: {extrinsics: {type: ros, sensor_frame: $(var sensor_frame)}}}}}}

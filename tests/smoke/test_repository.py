@@ -7,6 +7,22 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def assert_yaml_has_unique_keys(path):
+    def visit(node):
+        if isinstance(node, yaml.MappingNode):
+            keys = set()
+            for key, value in node.value:
+                assert isinstance(key, yaml.ScalarNode), f"{path}: non-scalar YAML key"
+                assert key.value not in keys, f"{path}: duplicate YAML key {key.value!r}"
+                keys.add(key.value)
+                visit(value)
+        elif isinstance(node, yaml.SequenceNode):
+            for value in node.value:
+                visit(value)
+
+    visit(yaml.compose(path.read_text()))
+
+
 def test_lock_is_https_and_exact():
     sha = re.compile(r"^[0-9a-f]{40}$")
     lock = yaml.safe_load((ROOT / "dependencies/locks/adt4.lock.repos").read_text())
@@ -17,13 +33,80 @@ def test_lock_is_https_and_exact():
 
 def test_mapper_config_contains_v1_architecture():
     config = yaml.safe_load(
-        (ROOT / "src/spark_3dsg_pipeline/config/hydra/default.yaml").read_text()
+        (
+            ROOT
+            / "src/spark_3dsg_pipeline/config/hydra/adt4.yaml"
+        ).read_text()
     )
     assert config["active_window"]["type"] == "ActiveWindow"
     assert config["active_window"]["tracker"]["type"] == "MaxIouTracker"
     assert config["active_window"]["object_extractor"]["type"] == "MeshObjectExtractor"
     assert config["frontend"]["traversability_places"]["layer"] == "MESH_PLACES"
+    assert "freespace_places" not in config["frontend"]
     assert "OBJECTS" in config["frontend"]["graph_updater"]["layer_updates"]
+    assert "places" not in config["backend"]["update_functors"]
+    assert "rooms" not in config["backend"]["update_functors"]
+    for frame_key in ("map_frame", "odom_frame", "robot_frame"):
+        assert frame_key not in config
+
+
+def test_classic_profile_adds_places_and_rooms_to_adt4_classic():
+    config = yaml.safe_load(
+        (
+            ROOT / "src/spark_3dsg_pipeline/config/hydra/classic.yaml"
+        ).read_text()
+    )
+    assert config["paths"] == ["khronos", "khronos_ros"]
+    assert config["active_window"]["type"] == "ActiveWindow"
+    assert config["active_window"]["object_detector"]["type"] == "ConnectedSemantics"
+    assert config["active_window"]["tracker"]["track_by"] == "voxels"
+    assert config["frontend"]["surface_places"]["type"] == "place_2d"
+    assert config["frontend"]["freespace_places"]["type"] == "gvd"
+    functors = config["backend"]["update_functors"]
+    assert functors["surface_places"]["type"] == "Update2dPlacesFunctor"
+    assert functors["places"]["type"] == "UpdatePlacesFunctor"
+    assert functors["rooms"]["type"] == "UpdateRoomsFunctor"
+    assert "buildings" not in functors
+
+
+def test_uhumans2_profile_uses_core_hydra_hierarchy():
+    config = yaml.safe_load(
+        (
+            ROOT
+            / "src/spark_3dsg_pipeline/config/hydra/uhumans2.yaml"
+        ).read_text()
+    )
+    assert "paths" not in config
+    assert config["active_window"]["type"] == "ReconstructionModule"
+    assert config["input"]["inputs"]["camera"]["receiver"]["type"] == "ClosedSetImageReceiver"
+    assert config["frontend"]["enable_mesh_objects"] is True
+    assert config["frontend"]["freespace_places"]["type"] == "gvd"
+    functors = config["backend"]["update_functors"]
+    assert functors["objects"]["type"] == "UpdateObjectsFunctor"
+    assert functors["places"]["type"] == "UpdatePlacesFunctor"
+    assert functors["rooms"]["type"] == "UpdateRoomsFunctor"
+    assert functors["buildings"]["type"] == "UpdateBuildingsFunctor"
+
+
+def test_every_dataset_selects_an_installed_complete_hydra_profile():
+    package = ROOT / "src/spark_3dsg_pipeline"
+    hydra_dir = package / "config/hydra"
+    for dataset_path in (package / "config/datasets").glob("*.yaml"):
+        dataset = yaml.safe_load(dataset_path.read_text())
+        profile = hydra_dir / dataset["hydra_config"]
+        assert profile.is_file(), f"{dataset_path.name}: missing {profile.name}"
+
+    assert not (hydra_dir / "empty.yaml").exists()
+    assert sorted(path.name for path in hydra_dir.glob("*.yaml")) == [
+        "adt4.yaml",
+        "classic.yaml",
+        "uhumans2.yaml",
+    ]
+    for profile in hydra_dir.glob("*.yaml"):
+        assert_yaml_has_unique_keys(profile)
+        config = yaml.safe_load(profile.read_text())
+        for frame_key in ("map_frame", "odom_frame", "robot_frame"):
+            assert frame_key not in config, f"{profile.name}: {frame_key} belongs to launch"
 
 
 def test_large_artifacts_are_ignored():
@@ -121,10 +204,10 @@ def test_launch_configs_keep_hydra_and_perception_paths_isolated():
     perception = (package / "launch/perception.launch.yaml").read_text()
 
     assert "name: hydra_config_path" in pipeline
-    assert "name: hydra_overlay_path" in pipeline
+    assert "name: hydra_overlay_path" not in pipeline
     assert "name: perception_config_path" in pipeline
     assert "--config-utilities-file $(var hydra_config_path)" in pipeline
-    assert "--config-utilities-file $(var hydra_overlay_path)" in pipeline
+    assert pipeline.count("--config-utilities-file") == 1
     assert "value: $(var perception_config_path)" in perception
 
 
@@ -132,6 +215,9 @@ def test_runtime_resources_use_ament_package_share():
     script = (ROOT / "scripts/run_pipeline.sh").read_text()
     assert "ros2 pkg prefix --share spark_3dsg_pipeline" in script
     assert "install/spark_3dsg_pipeline/share" not in script
+    assert "--get hydra_config" in script
+    assert 'hydra_config_path:="$hydra_config"' in script
+    assert 'cp "$hydra_config" "$run_dir/hydra.yaml"' in script
 
     bag_launch = (
         ROOT / "src/spark_3dsg_pipeline/launch/bag.launch.yaml"

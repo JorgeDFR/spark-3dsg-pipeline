@@ -17,5 +17,5 @@ depth_scale: 1000.0
 depth_encodings: [16UC1, 32FC1]
 use_sim_time: true
 semantics_source: online
-mapper_overlay: empty.yaml
+hydra_config: adt4.yaml
 playback_rate: 1.0

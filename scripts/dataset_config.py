@@ -21,6 +21,7 @@ REQUIRED_TOPIC_KEYS = (
     "tf",
     "tf_static",
 )
+REQUIRED_CONFIG_KEYS = ("name", "frames", "semantics_source", "hydra_config")
 
 
 def config_directory() -> Path:
@@ -64,6 +65,9 @@ def load_config(name_or_path: str) -> dict[str, Any]:
     missing = [key for key in REQUIRED_TOPIC_KEYS if not topics.get(key)]
     if missing:
         raise ValueError(f"dataset config is missing topics: {', '.join(missing)}")
+    missing = [key for key in REQUIRED_CONFIG_KEYS if not config.get(key)]
+    if missing:
+        raise ValueError(f"dataset config is missing settings: {', '.join(missing)}")
     return config
 
 

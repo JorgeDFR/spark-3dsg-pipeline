@@ -1,5 +1,13 @@
 ---
-# CPU smoke overlay: ground-truth semantic IDs rather than packed instances.
+# uHumans2 office demo: OBJECTS + PLACES + ROOMS + BUILDINGS + AGENTS + mesh.
+# map_frame, odom_frame, and robot_frame are supplied by pipeline.launch.yaml.
+robot_id: 0
+config_verbosity: 1
+enable_zmq_interface: false
+map_window: {type: spatial, max_radius_m: 8.0}
+semantic_label_remap_filepath: $<env ROS_WS>/install/share/hydra/config/label_remaps/uhumans2_office.yaml
+semantic_layers: [OBJECTS]
+mesh: {with_colors: true, with_labels: true, with_first_seen_stamps: true}
 labelspace:
   type: from_config
   total_semantic_labels: 21
@@ -30,15 +38,91 @@ labelspace:
     - {label: 19, name: wall}
     - {label: 20, name: human}
 input:
+  type: RosInput
+  max_receiver_queue_size: 1
   inputs:
     camera:
       receiver: {type: ClosedSetImageReceiver, queue_size: 30}
+      sensor:
+        type: camera_info
+        min_range: 0.1
+        max_range: 5.0
+        extrinsics: {type: ros}
 active_window:
-  volumetric_map: {with_semantics: true}
-  object_detector:
-    type: ConnectedSemantics
-    min_cluster_size: 30
-    use_full_connectivity: true
-    use_3d: true
-    grid_size: 0.1
-    max_range: 10.0
+  type: ReconstructionModule
+  full_update_separation_s: 0.2
+  volumetric_map: {voxels_per_side: 16, voxel_size: 0.1, truncation_distance: 0.3, with_semantics: true}
+  tsdf:
+    semantic_integrator: {type: SingleLabelIntegrator}
+frontend:
+  type: GraphBuilder
+  enable_mesh_objects: true
+  serialize_dsg_mesh: true
+  clear_object_meshes: true
+  pgmo: {time_horizon: 15.0, d_graph_resolution: 2.5, mesh_resolution: 0.005}
+  objects:
+    min_cluster_size: 40
+    cluster_tolerance: 0.25
+    bounding_box_type: RAABB
+  freespace_places:
+    type: gvd
+    min_component_size: 5
+    gvd:
+      max_distance_m: 4.5
+      min_distance_m: 0.2
+      min_diff_m: 0.1
+      voronoi_config: {mode: L1_THEN_ANGLE, min_distance_m: 0.30, parent_l1_separation: 20, parent_cos_angle_separation: 0.2}
+    graph:
+      compression_distance_m: 1.5
+      min_node_distance_m: 0.3
+      merge_nearby_nodes: true
+      merge_policy: distance
+      node_merge_distance_m: 0.7
+      overlap_edges: {enable: false}
+      freespace_edges: {enable: false}
+    tsdf_interpolator: {type: downsample, ratio: 2}
+backend:
+  type: BackendModule
+  publish_backend_tf: false
+  serialize_dsg_mesh: true
+  min_dsg_separation_s: 1.0
+  publish_mesh: true
+  min_mesh_separation_s: 10.0
+  add_places_to_deformation_graph: true
+  optimize_on_lc: true
+  enable_node_merging: true
+  update_functors:
+    agents: {type: UpdateAgentsFunctor}
+    objects: {type: UpdateObjectsFunctor}
+    places: {type: UpdatePlacesFunctor}
+    rooms:
+      type: UpdateRoomsFunctor
+      room_finder:
+        min_dilation_m: 0.5
+        max_dilation_m: 1.2
+        min_component_size: 10
+        min_room_size: 10
+        dilation_threshold_mode: PLATEAU
+        min_lifetime_length_m: 0.1
+        plateau_ratio: 0.15
+        clustering_mode: NEIGHBORS
+        dilation_diff_threshold_m: -1.0
+    buildings: {type: UpdateBuildingsFunctor}
+  pgmo:
+    run_mode: FULL
+    embed_trajectory_delta_t: 5.0
+    num_interp_pts: 3
+    interp_horizon: 10.0
+    add_initial_prior: true
+    optimizer: {type: KimeraRpgoOptimizer, solver: LM, gnc: {inlier_probability: 0.9, mu_step: 1.6, max_iterations: 100}}
+    covariance:
+      odom: 1.0e-02
+      loop_close: 5.0e-02
+      sg_loop_close: 1.0e-01
+      prior: 1.0e-02
+      mesh_mesh: 1.0e-02
+      pose_mesh: 1.0e-02
+      place_mesh: 1.0e-02
+      place_edge: 10.0
+      place_merge: 10.0
+      object_merge: 10.0

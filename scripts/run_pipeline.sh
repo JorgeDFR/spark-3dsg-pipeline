@@ -5,6 +5,7 @@ dataset=spot
 bag=
 run_id=
 rate=
+hydra_config_name=
 skip_validation=false
 spark_home="${HOME:-/home/spark}"
 pipeline_root="${PIPELINE_ROOT:-$spark_home/spark-3dsg-pipeline}"
@@ -16,6 +17,7 @@ while (($#)); do
     --bag) bag="${2:?missing value for --bag}"; shift 2 ;;
     --run-id) run_id="${2:?missing value for --run-id}"; shift 2 ;;
     --rate) rate="${2:?missing value for --rate}"; shift 2 ;;
+    --hydra-config) hydra_config_name="${2:?missing value for --hydra-config}"; shift 2 ;;
     --skip-validation) skip_validation=true; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -45,11 +47,17 @@ map_frame=$(python3 "$dataset_config" "$dataset" --get frames.map)
 odom_frame=$(python3 "$dataset_config" "$dataset" --get frames.odom)
 robot_frame=$(python3 "$dataset_config" "$dataset" --get frames.robot)
 sensor_frame=$(python3 "$dataset_config" "$dataset" --get frames.sensor)
-mapper_overlay=$(python3 "$dataset_config" "$dataset" --get mapper_overlay)
 package_share=$(ros2 pkg prefix --share spark_3dsg_pipeline)
-hydra_overlay="$package_share/config/hydra/$mapper_overlay"
-[[ -f "$hydra_overlay" ]] || {
-  echo "Hydra overlay not found: $hydra_overlay" >&2
+if [[ -z "$hydra_config_name" ]]; then
+  hydra_config_name=$(python3 "$dataset_config" "$dataset" --get hydra_config)
+fi
+if [[ "$hydra_config_name" = /* ]]; then
+  hydra_config="$hydra_config_name"
+else
+  hydra_config="$package_share/config/hydra/$hydra_config_name"
+fi
+[[ -f "$hydra_config" ]] || {
+  echo "Hydra config not found: $hydra_config" >&2
   exit 2
 }
 
@@ -65,6 +73,7 @@ if [[ -e "$run_dir" ]]; then
 fi
 mkdir -p "$run_dir/logs" "$run_dir/upstream"
 cp "$config_path" "$run_dir/dataset.yaml"
+cp "$hydra_config" "$run_dir/hydra.yaml"
 cp "$pipeline_root/dependencies/locks/adt4.lock.repos" "$run_dir/adt4.lock.repos"
 
 pipeline_pid=
@@ -84,7 +93,7 @@ ros2 launch spark_3dsg_pipeline pipeline.launch.yaml \
   odom_frame:="$odom_frame" \
   robot_frame:="$robot_frame" \
   sensor_frame:="$sensor_frame" \
-  hydra_overlay_path:="$hydra_overlay" \
+  hydra_config_path:="$hydra_config" \
   exit_after_clock:=true \
   >"$run_dir/logs/pipeline.log" 2>&1 &
 pipeline_pid=$!
@@ -128,6 +137,7 @@ pipeline_pid=
 "$pipeline_root/scripts/save_dsg.sh" "$run_dir"
 
 PIPELINE_RUN_DIR="$run_dir" PIPELINE_DATASET="$dataset_name" PIPELINE_BAG="$bag" \
+PIPELINE_HYDRA_CONFIG="$hydra_config_name" \
 python3 - <<'PY'
 import hashlib
 import json
@@ -142,6 +152,7 @@ metadata = {
     "created_utc": datetime.now(timezone.utc).isoformat(),
     "dataset": os.environ["PIPELINE_DATASET"],
     "bag": os.environ["PIPELINE_BAG"],
+    "hydra_config": os.environ["PIPELINE_HYDRA_CONFIG"],
     "dependency_lock_sha256": hashlib.sha256(lock.read_bytes()).hexdigest(),
     "outputs": {
         "dsg": "dsg.json",

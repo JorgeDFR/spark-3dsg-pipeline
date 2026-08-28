@@ -55,7 +55,7 @@ make build PROFILE=core|gpu
 make models PROFILE=gpu
 make prepare-data
 make shell PROFILE=core|gpu
-make validate-bag PROFILE=core DATASET=custom_rgbd BAG=/home/spark/data/example
+make validate-bag PROFILE=gpu DATASET=spot BAG=/home/spark/data/spot
 make run PROFILE=gpu DATASET=spot BAG=/home/spark/data/spot
 make inspect DSG=/home/spark/output/run/dsg.json
 make test
@@ -83,7 +83,12 @@ make inspect DSG=/home/spark/output/run/dsg.json
 make inspect DSG=/home/spark/output/run/dsg.json INSPECT_ARGS=--json
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATASETS.md](docs/DATASETS.md), and [docs/DEBUGGING.md](docs/DEBUGGING.md) before running a large bag.
+The three supported graph profiles (`adt4.yaml`, `classic.yaml`, and
+`uhumans2.yaml`) and their tuning surfaces are described in
+[docs/HYDRA_CONFIG_REFERENCE.md](docs/HYDRA_CONFIG_REFERENCE.md). See also
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
+[docs/DATASETS.md](docs/DATASETS.md), and
+[docs/DEBUGGING.md](docs/DEBUGGING.md) before running a large bag.
 
 ## Reproducibility
 

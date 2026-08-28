@@ -46,13 +46,23 @@ def summarize(path: Path) -> dict[str, Any]:
 
     graph = dsg.DynamicSceneGraph.load(str(path))
     layers = dsg.DsgLayers
+    layer_names = (
+        "OBJECTS",
+        "PLACES",
+        "MESH_PLACES",
+        "ROOMS",
+        "BUILDINGS",
+        "AGENTS",
+    )
+    layer_counts = {
+        name: layer_count(graph, layer)
+        if (layer := getattr(layers, name, None)) is not None
+        else 0
+        for name in layer_names
+    }
     objects_layer = layers.OBJECTS
-    places_layer = getattr(layers, "MESH_PLACES", getattr(layers, "PLACES"))
-    agents_layer = layers.AGENTS
-
-    object_count = layer_count(graph, objects_layer)
-    place_count = layer_count(graph, places_layer)
-    agent_count = layer_count(graph, agents_layer)
+    object_count = layer_counts["OBJECTS"]
+    agent_count = layer_counts["AGENTS"]
 
     labels: collections.Counter[str] = collections.Counter()
     if object_count:
@@ -87,11 +97,7 @@ def summarize(path: Path) -> dict[str, Any]:
 
     return {
         "graph": {"nodes": graph.num_nodes(), "edges": graph.num_edges()},
-        "layers": {
-            "OBJECTS": object_count,
-            "MESH_PLACES": place_count,
-            "AGENTS": agent_count,
-        },
+        "layers": layer_counts,
         "object_labels": dict(labels.most_common()),
         "mesh": {"vertices": mesh_vertices, "faces": mesh_faces},
         "trajectory_exists": agent_count > 0,

@@ -9,13 +9,13 @@ topics:
   tf: /tf
   tf_static: /tf_static
 frames:
-  map: map
-  odom: odom
+  map: world
+  odom: world
   robot: base_link_gt
   sensor: left_cam
 depth_scale: 1.0
 depth_encodings: [16UC1, 32FC1]
 use_sim_time: true
 semantics_source: precomputed
-mapper_overlay: uhumans2.yaml
+hydra_config: uhumans2.yaml
 playback_rate: 1.0

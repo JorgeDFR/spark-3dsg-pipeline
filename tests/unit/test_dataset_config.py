@@ -9,6 +9,7 @@ def test_known_dataset_resolves():
     config = load_config("custom_rgbd")
     assert get_value(config, "frames.sensor") == "camera_color_optical_frame"
     assert config["semantics_source"] == "online"
+    assert config["hydra_config"] == "adt4.yaml"
 
 
 def test_dataset_topics_have_normalized_targets():
@@ -21,6 +22,11 @@ def test_dataset_topics_have_normalized_targets():
     assert config["depth_scale"] == 1.0
     assert config["depth_encodings"] == ["32FC1"]
 
+    uhumans2 = load_config("uhumans2")
+    assert uhumans2["frames"]["map"] == "world"
+    assert uhumans2["frames"]["odom"] == "world"
+    assert uhumans2["hydra_config"] == "uhumans2.yaml"
+
 
 def test_dataset_rejects_incomplete_topic_contract(tmp_path):
     config = tmp_path / "incomplete.yaml"
@@ -28,3 +34,14 @@ def test_dataset_rejects_incomplete_topic_contract(tmp_path):
 
     with pytest.raises(ValueError, match="missing topics"):
         load_config(str(config))
+
+
+def test_dataset_rejects_missing_hydra_profile(tmp_path):
+    config = load_config("spot")
+    config.pop("hydra_config")
+    path = tmp_path / "missing_profile.yaml"
+    import yaml
+
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    with pytest.raises(ValueError, match="missing settings: hydra_config"):
+        load_config(str(path))

@@ -9,6 +9,7 @@ PIPELINE_ROOT := $(CONTAINER_HOME)/spark-3dsg-pipeline
 INSPECT_ARGS ?=
 PREPARE_ARGS ?=
 RUN_ARGS ?=
+HYDRA_CONFIG ?=
 
 ifeq ($(PROFILE),core)
 SERVICE := core
@@ -58,9 +59,9 @@ validate-bag: ## Validate BAG against DATASET before mapping
 	@test -n "$(BAG)" || { echo "BAG is required (container path, normally $(CONTAINER_HOME)/data/...)" >&2; exit 2; }
 	@$(COMPOSE) --profile $(PROFILE) run --rm $(SERVICE) $(PIPELINE_ROOT)/scripts/validate_bag.py --bag "$(BAG)" --dataset "$(DATASET)"
 
-run: ## Run a headless bag pipeline; requires BAG=/home/spark/data/...
+run: ## Run a headless bag pipeline; requires BAG=...; optional HYDRA_CONFIG=classic.yaml
 	@test -n "$(BAG)" || { echo "BAG is required (container path, normally $(CONTAINER_HOME)/data/...)" >&2; exit 2; }
-	@$(COMPOSE) --profile $(PROFILE) run --rm $(SERVICE) $(PIPELINE_ROOT)/scripts/run_pipeline.sh --dataset "$(DATASET)" --bag "$(BAG)" $(RUN_ARGS)
+	@$(COMPOSE) --profile $(PROFILE) run --rm $(SERVICE) $(PIPELINE_ROOT)/scripts/run_pipeline.sh --dataset "$(DATASET)" --bag "$(BAG)" $(if $(HYDRA_CONFIG),--hydra-config "$(HYDRA_CONFIG)",) $(RUN_ARGS)
 
 inspect: ## Inspect DSG=/home/spark/output/.../dsg.json
 	@test -n "$(DSG)" || { echo "DSG is required (container path, normally $(CONTAINER_HOME)/output/...)" >&2; exit 2; }
