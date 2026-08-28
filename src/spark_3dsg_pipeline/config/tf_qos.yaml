@@ -1,5 +1,7 @@
 /tf_static:
-  depth: 1
+  # The Spot example records several independent static-transform batches.
+  # Retain all of them for subscribers that complete DDS discovery slightly late.
+  depth: 100
   durability: transient_local
   history: keep_last
   reliability: reliable

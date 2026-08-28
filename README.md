@@ -65,8 +65,12 @@ make lint
 RViz is optional and requires host display forwarding:
 
 ```bash
-make rviz PROFILE=gpu
+make rviz PROFILE=gpu DATASET=spot
 ```
+
+The visualization command resolves the adapter's map frame, starts the Hydra
+streaming visualizer, and then starts RViz with the DSG mesh, graph-marker, and
+agent-trajectory displays. Run it while the headless pipeline is active.
 
 ## Inputs and outputs
 

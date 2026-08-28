@@ -14,3 +14,15 @@
   workspace so launch and configuration edits do not require image rebuilds.
 - Wait for the configured TF paths during bag validation instead of stopping
   after an arbitrary initial set of transforms.
+- Isolate Hydra and perception launch arguments and resolve package resources
+  through the ament package share instead of assuming an install layout.
+- Delay bag playback until Hydra creates its camera input subscription and retain
+  all static-transform batches for late DDS discovery.
+- Pass all dataset topic remaps through one rosbag2 `--remap` option so RGB,
+  depth, and CameraInfo are normalized together.
+- Make `bag.launch.yaml` and `visualization.launch.yaml` the canonical playback
+  and RViz entry points, including dataset TF remaps and fixed-frame selection.
+- Configure RViz displays for the DSG mesh, graph markers, and agent trajectory,
+  and syntax-check every installed launch file.
+- Remove the unused no-op Docker entrypoint and use the repository dependency
+  bootstrap script as the single `vcstool` import implementation.

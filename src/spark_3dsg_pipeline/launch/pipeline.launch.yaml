@@ -8,16 +8,16 @@ launch:
   - arg: {name: robot_frame, default: base_link}
   - arg: {name: sensor_frame, default: camera_color_optical_frame}
   - arg: {name: exit_after_clock, default: 'true'}
-  - arg: {name: config_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/hydra/default.yaml}
-  - arg: {name: overlay_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/hydra/empty.yaml}
-  - arg: {name: perception_config, default: $(find-pkg-share spark_3dsg_pipeline)/config/perception/yoloe.yaml}
+  - arg: {name: hydra_config_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/hydra/default.yaml}
+  - arg: {name: hydra_overlay_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/hydra/empty.yaml}
+  - arg: {name: perception_config_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/perception/yoloe.yaml}
 
   - include:
       if: $(var start_perception)
       file: $(find-pkg-share spark_3dsg_pipeline)/launch/perception.launch.yaml
       arg:
         - {name: use_sim_time, value: $(var use_sim_time)}
-        - {name: config_path, value: $(var perception_config)}
+        - {name: perception_config_path, value: $(var perception_config_path)}
 
   - node:
       pkg: hydra_ros
@@ -33,8 +33,8 @@ launch:
         - {from: ~/input/camera/semantic/image_raw, to: /input/semantic/instances}
         - {from: ~/labelspace, to: /input/semantic/labelspace}
       args: >
-        --config-utilities-file $(var config_path)
-        --config-utilities-file $(var overlay_path)
+        --config-utilities-file $(var hydra_config_path)
+        --config-utilities-file $(var hydra_overlay_path)
         --config-utilities-yaml {exit_after_clock: $(var exit_after_clock), log_path: $(var output_dir), output: {use_timestamp: false, overwrite: true}}
         --config-utilities-yaml {robot_id: 0, map_frame: $(var map_frame), odom_frame: $(var odom_frame), robot_frame: $(var robot_frame)}
         --config-utilities-yaml {input: {inputs: {camera: {sensor: {extrinsics: {type: ros, sensor_frame: $(var sensor_frame)}}}}}}

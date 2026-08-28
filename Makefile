@@ -67,7 +67,8 @@ inspect: ## Inspect DSG=/home/spark/output/.../dsg.json
 	@$(COMPOSE) --profile core run --rm core python3 $(PIPELINE_ROOT)/scripts/inspect_dsg.py "$(DSG)" $(INSPECT_ARGS)
 
 rviz: ## Start optional RViz with the scene-graph configuration
-	@$(COMPOSE) --profile rviz run --rm rviz
+	@$(COMPOSE) --profile rviz run --rm rviz \
+		$(PIPELINE_ROOT)/scripts/run_visualization.sh "$(DATASET)"
 
 test: ## Run repository tests inside the core image
 	@$(COMPOSE) --profile core run --rm core $(PIPELINE_ROOT)/scripts/run_tests.sh

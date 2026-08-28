@@ -10,6 +10,8 @@
   <exec_depend>hydra_ros</exec_depend>
   <exec_depend>hydra_visualizer</exec_depend>
   <exec_depend>khronos_ros</exec_depend>
+  <exec_depend>kimera_pgmo_rviz</exec_depend>
+  <exec_depend>ros2launch</exec_depend>
   <exec_depend>rosbag2_transport</exec_depend>
   <exec_depend>semantic_inference_ros</exec_depend>
   <exec_depend>tf2_ros</exec_depend>

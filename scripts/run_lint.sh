@@ -25,5 +25,11 @@ for path in Path('dependencies/locks').glob('*.repos'):
         assert sha.fullmatch(entry['version']), f'{path}:{name}: floating revision'
 PY
 
-ros2 launch spark_3dsg_pipeline pipeline.launch.yaml --show-args >/dev/null
+for launch_file in \
+  bag.launch.yaml \
+  perception.launch.yaml \
+  pipeline.launch.yaml \
+  visualization.launch.yaml; do
+  ros2 launch spark_3dsg_pipeline "$launch_file" --show-args >/dev/null
+done
 echo "Lint checks passed"

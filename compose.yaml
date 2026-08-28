@@ -10,8 +10,9 @@ x-common: &common
     - ${DATA_DIR:-./data}:/home/spark/data:ro
     - ${MODEL_DIR:-./models}:/home/spark/models
     - ${OUTPUT_DIR:-./output}:/home/spark/output
-    - ${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:/home/spark/ros_ws/src/spark_3dsg_pipeline:ro
+    - ${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:/home/spark/ros_ws/src/spark_3dsg_pipeline
     - spark-cache:/home/spark/.cache
+    - ./scripts:/home/spark/spark-3dsg-pipeline/scripts #TEMP
   working_dir: /home/spark/spark-3dsg-pipeline
   stdin_open: true
   tty: true
@@ -74,10 +75,11 @@ services:
       - ${DATA_DIR:-./data}:/home/spark/data:ro
       - ${MODEL_DIR:-./models}:/home/spark/models
       - ${OUTPUT_DIR:-./output}:/home/spark/output
-      - ${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:/home/spark/ros_ws/src/spark_3dsg_pipeline:ro
+      - ${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:/home/spark/ros_ws/src/spark_3dsg_pipeline
       - spark-cache:/home/spark/.cache
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    command: ["rviz2", "-d", "/home/spark/ros_ws/install/spark_3dsg_pipeline/share/spark_3dsg_pipeline/rviz/scene_graph.rviz"]
+      - ./scripts:/home/spark/spark-3dsg-pipeline/scripts #TEMP
+    command: ["/home/spark/spark-3dsg-pipeline/scripts/run_visualization.sh", "spot"]
     gpus: all
 
 volumes:

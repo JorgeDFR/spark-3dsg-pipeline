@@ -12,15 +12,15 @@ from typing import Any
 import yaml
 
 
-NORMALIZED_TOPICS = {
-    "color": "/input/color/image_raw",
-    "depth": "/input/depth/image_rect",
-    "camera_info": "/input/color/camera_info",
-    "instances": "/input/semantic/instances",
-    "labelspace": "/input/semantic/labelspace",
-    "tf": "/tf",
-    "tf_static": "/tf_static",
-}
+REQUIRED_TOPIC_KEYS = (
+    "color",
+    "depth",
+    "camera_info",
+    "instances",
+    "labelspace",
+    "tf",
+    "tf_static",
+)
 
 
 def config_directory() -> Path:
@@ -58,6 +58,12 @@ def load_config(name_or_path: str) -> dict[str, Any]:
         config = yaml.safe_load(stream)
     if not isinstance(config, dict):
         raise ValueError(f"dataset config is not a mapping: {path}")
+    topics = config.get("topics")
+    if not isinstance(topics, dict):
+        raise ValueError(f"dataset config has no topics mapping: {path}")
+    missing = [key for key in REQUIRED_TOPIC_KEYS if not topics.get(key)]
+    if missing:
+        raise ValueError(f"dataset config is missing topics: {', '.join(missing)}")
     return config
 
 
@@ -77,7 +83,6 @@ def main() -> int:
     mode.add_argument("--get", metavar="KEY", help="print a dotted key")
     mode.add_argument("--json", action="store_true", help="print resolved JSON")
     mode.add_argument("--path", action="store_true", help="print resolved path")
-    mode.add_argument("--remaps", action="store_true", help="print bag remaps, one per line")
     args = parser.parse_args()
 
     if args.path:
@@ -87,12 +92,6 @@ def main() -> int:
     config = load_config(args.dataset)
     if args.json:
         print(json.dumps(config, indent=2, sort_keys=True))
-    elif args.remaps:
-        topics = config.get("topics", {})
-        for key, target in NORMALIZED_TOPICS.items():
-            source = topics.get(key)
-            if source and source != target:
-                print(f"{source}:={target}")
     else:
         value = get_value(config, args.get)
         if isinstance(value, bool):

@@ -8,7 +8,6 @@ rate=
 skip_validation=false
 spark_home="${HOME:-/home/spark}"
 pipeline_root="${PIPELINE_ROOT:-$spark_home/spark-3dsg-pipeline}"
-ros_ws="${ROS_WS:-$spark_home/ros_ws}"
 dataset_config="$pipeline_root/scripts/dataset_config.py"
 
 while (($#)); do
@@ -42,6 +41,18 @@ else
   start_perception=false
 fi
 
+map_frame=$(python3 "$dataset_config" "$dataset" --get frames.map)
+odom_frame=$(python3 "$dataset_config" "$dataset" --get frames.odom)
+robot_frame=$(python3 "$dataset_config" "$dataset" --get frames.robot)
+sensor_frame=$(python3 "$dataset_config" "$dataset" --get frames.sensor)
+mapper_overlay=$(python3 "$dataset_config" "$dataset" --get mapper_overlay)
+package_share=$(ros2 pkg prefix --share spark_3dsg_pipeline)
+hydra_overlay="$package_share/config/hydra/$mapper_overlay"
+[[ -f "$hydra_overlay" ]] || {
+  echo "Hydra overlay not found: $hydra_overlay" >&2
+  exit 2
+}
+
 if [[ -z "$run_id" ]]; then
   run_id="$(date -u +%Y%m%dT%H%M%SZ)-${dataset_name}"
 fi
@@ -55,12 +66,6 @@ fi
 mkdir -p "$run_dir/logs" "$run_dir/upstream"
 cp "$config_path" "$run_dir/dataset.yaml"
 cp "$pipeline_root/dependencies/locks/adt4.lock.repos" "$run_dir/adt4.lock.repos"
-
-map_frame=$(python3 "$dataset_config" "$dataset" --get frames.map)
-odom_frame=$(python3 "$dataset_config" "$dataset" --get frames.odom)
-robot_frame=$(python3 "$dataset_config" "$dataset" --get frames.robot)
-sensor_frame=$(python3 "$dataset_config" "$dataset" --get frames.sensor)
-mapper_overlay=$(python3 "$dataset_config" "$dataset" --get mapper_overlay)
 
 pipeline_pid=
 cleanup() {
@@ -79,24 +84,33 @@ ros2 launch spark_3dsg_pipeline pipeline.launch.yaml \
   odom_frame:="$odom_frame" \
   robot_frame:="$robot_frame" \
   sensor_frame:="$sensor_frame" \
-  overlay_path:="$ros_ws/install/spark_3dsg_pipeline/share/spark_3dsg_pipeline/config/hydra/$mapper_overlay" \
+  hydra_overlay_path:="$hydra_overlay" \
   exit_after_clock:=true \
   >"$run_dir/logs/pipeline.log" 2>&1 &
 pipeline_pid=$!
 
 ready=false
-for _ in $(seq 1 60); do
+readiness_topic=/input/color/camera_info
+for _ in $(seq 1 120); do
   if ! kill -0 "$pipeline_pid" 2>/dev/null; then
     echo "pipeline exited during startup; see $run_dir/logs/pipeline.log" >&2
     exit 1
   fi
-  if ros2 node list 2>/dev/null | grep -q '/hydra'; then
+  subscription_count=$(
+    { ros2 topic info "$readiness_topic" 2>/dev/null || true; } \
+      | awk '/Subscription count:/ {print $3; exit}'
+  )
+  if [[ "${subscription_count:-0}" =~ ^[0-9]+$ ]] \
+      && ((subscription_count > 0)); then
     ready=true
     break
   fi
   sleep 1
 done
-[[ "$ready" == true ]] || { echo "pipeline did not become ready in 60 seconds" >&2; exit 1; }
+[[ "$ready" == true ]] || {
+  echo "pipeline did not subscribe to $readiness_topic within 120 seconds; see $run_dir/logs/pipeline.log" >&2
+  exit 1
+}
 
 bag_args=("$bag" "$dataset")
 [[ -n "$rate" ]] && bag_args+=("$rate")

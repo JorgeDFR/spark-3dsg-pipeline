@@ -35,5 +35,5 @@ model:
       - ball
     confidence_threshold: 0.3
     min_segmentation_size: 30
-visualize_semantic_img: false
+visualize_semantic_img: true
 nickname: semantic_inference
