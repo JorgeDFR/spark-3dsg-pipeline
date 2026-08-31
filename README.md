@@ -7,7 +7,7 @@ The v1 pipeline is headless by default:
 ```text
 RGB-D + TF/odometry -> YOLOE or recorded instances -> Khronos/Hydra -> Spark-DSG
                                                                       |
-                                           dsg.json + mesh.ply + metadata.json
+                                 mesh-free dsg.json + mesh.ply + metadata.json
 ```
 
 ## Status
@@ -44,7 +44,7 @@ Containers run as the non-root `spark` user. Its UID and GID are set at image bu
 
 The repository-owned ROS package is [src/spark_3dsg_pipeline](src/spark_3dsg_pipeline); the repository itself does not imitate a complete ROS workspace. Compose mounts this package at `/home/spark/ros_ws/src/spark_3dsg_pipeline` over the copy used during the image build. The workspace is built with `colcon --symlink-install`, so edits to existing launch, configuration, and RViz files are visible in newly started containers without rebuilding the image. Rebuild after changing `package.xml`, `CMakeLists.txt`, or compiled dependencies.
 
-Every run creates `/home/spark/output/<UTC timestamp>-<dataset>/`. The run wrapper records the resolved dataset configuration, upstream lock hash, command, and logs. Hydra/Khronos are asked to stop when simulated time ends; the wrapper then normalizes upstream output names to the output contract where possible and fails if no DSG JSON was produced.
+Every run creates `/home/spark/output/<UTC timestamp>-<dataset>/`. The run wrapper records the resolved dataset configuration, upstream lock hash, command, and logs. Hydra/Khronos are asked to stop when simulated time ends; the wrapper then writes a normalized, mesh-free `dsg.json` from the backend graph, extracts the backend mesh to `mesh.ply` when available, and fails if no backend DSG JSON was produced. Original Hydra/Khronos outputs remain unchanged under `upstream/`.
 
 ## Commands
 
@@ -76,7 +76,7 @@ agent-trajectory displays. Run it while the headless pipeline is active.
 
 The normalized interface and frame requirements are in [docs/INPUT_CONTRACT.md](docs/INPUT_CONTRACT.md). Add a robot by creating one dataset YAML file; do not fork the core launch. See [docs/CUSTOM_SENSOR.md](docs/CUSTOM_SENSOR.md).
 
-The graph inspection command supports human-readable and machine-readable output:
+The graph inspection command supports human-readable and machine-readable output. Both formats summarize the static graph and include edge counts grouped by endpoint layer type; agent trajectory nodes, agent edges, and mesh statistics are omitted. The `--require-v1` option still validates the required trajectory and mesh internally.
 
 ```bash
 make inspect DSG=/home/spark/output/run/dsg.json

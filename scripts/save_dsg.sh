@@ -5,19 +5,34 @@ run_dir="${1:?usage: save_dsg.sh RUN_DIR}"
 upstream="$run_dir/upstream"
 [[ -d "$upstream" ]] || { echo "missing upstream output directory: $upstream" >&2; exit 1; }
 
-if [[ ! -f "$run_dir/dsg.json" ]]; then
-  source_dsg=$(find "$upstream" -type f \( -name 'dsg.json' -o -name '*dsg*.json' -o -name 'backend.json' \) -print | sort | tail -n 1)
-  [[ -n "$source_dsg" ]] || { echo "mapping finished without a DSG JSON under $upstream" >&2; exit 1; }
-  cp "$source_dsg" "$run_dir/dsg.json"
+source_dsg=$(find "$upstream" -type f -path '*/backend/dsg.json' -print | sort | tail -n 1)
+if [[ -z "$source_dsg" ]]; then
+  source_dsg=$(find "$upstream" -type f -name 'backend.json' -print | sort | tail -n 1)
 fi
+if [[ -z "$source_dsg" ]]; then
+  source_dsg=$(find "$upstream" -type f -path '*/backend/*' -name '*dsg*.json' -print | sort | tail -n 1)
+fi
+[[ -n "$source_dsg" ]] || {
+  echo "mapping finished without a backend DSG JSON under $upstream" >&2
+  exit 1
+}
+
+source_mesh_dsg=$(
+  find "$(dirname "$source_dsg")" -maxdepth 1 -type f \
+    -name '*dsg*mesh*.json' -print | sort | tail -n 1
+)
+[[ -n "$source_mesh_dsg" ]] || source_mesh_dsg="$source_dsg"
 
 if [[ ! -f "$run_dir/mesh.ply" ]]; then
-  source_mesh=$(find "$upstream" -type f -name '*.ply' -print | sort | tail -n 1)
+  source_mesh=$(find "$upstream" -type f -path '*/backend/*.ply' -print | sort | tail -n 1)
+  if [[ -z "$source_mesh" ]]; then
+    source_mesh=$(find "$upstream" -type f -name '*.ply' -print | sort | tail -n 1)
+  fi
   [[ -z "$source_mesh" ]] || cp "$source_mesh" "$run_dir/mesh.ply"
 fi
 
 if [[ ! -f "$run_dir/mesh.ply" ]]; then
-  python3 - "$run_dir/dsg.json" "$run_dir/mesh.ply" <<'PY'
+  python3 - "$source_mesh_dsg" "$run_dir/mesh.ply" <<'PY'
 import sys
 import spark_dsg
 
@@ -46,4 +61,4 @@ PY
 fi
 
 test -s "$run_dir/dsg.json"
-echo "DSG saved: $run_dir/dsg.json"
+echo "3D Scene Graph saved: $run_dir/dsg.json"

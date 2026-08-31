@@ -21,7 +21,7 @@ bag/dataset adapter
                                       v
                               Hydra backend + Spark-DSG
                                       |
-                           dsg.json + mesh + metadata
+                  mesh-free dsg.json + mesh + metadata
 ```
 
 Owned here: Docker, exact locks, launch composition, complete mapper profiles,

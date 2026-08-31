@@ -11,6 +11,102 @@ from pathlib import Path
 from typing import Any
 
 
+EDGE_LAYER_ORDER = (
+    "SEGMENTS",
+    "OBJECTS",
+    "AGENTS",
+    "MESH_PLACES",
+    "TRAVERSABILITY",
+    "PLACES",
+    "ROOMS",
+    "BUILDINGS",
+)
+
+
+def _layer_key_tuple(key: Any) -> tuple[int, int]:
+    return int(key.layer), int(key.partition)
+
+
+def _layer_names_by_key(graph: Any, layers: Any) -> dict[tuple[int, int], str]:
+    names_by_key: dict[tuple[int, int], str] = {}
+    for name in EDGE_LAYER_ORDER:
+        if name == "AGENTS":
+            # Agent trajectories are stored in dynamic partitions of the object
+            # layer, so the default AGENTS key aliases OBJECTS.
+            continue
+        layer = getattr(layers, name, None)
+        if layer is None:
+            continue
+        try:
+            names_by_key.setdefault(_layer_key_tuple(graph.get_layer_key(layer)), name)
+        except Exception:
+            try:
+                key = layers.name_to_layer_id(name)
+                if key is not None:
+                    names_by_key.setdefault(_layer_key_tuple(key), name)
+            except Exception:
+                pass
+
+    try:
+        for name, key in graph.layer_names.items():
+            if name != "AGENTS":
+                names_by_key.setdefault(_layer_key_tuple(key), str(name))
+    except Exception:
+        pass
+    return names_by_key
+
+
+def _edge_layer_name(
+    graph: Any,
+    node: Any,
+    layers: Any,
+    names_by_key: dict[tuple[int, int], str],
+) -> str:
+    if "Agent" in type(node.attributes).__name__:
+        return "AGENTS"
+
+    key = _layer_key_tuple(node.layer)
+    name = names_by_key.get(key)
+    if name is not None:
+        return name
+
+    # Spark-DSG stores agent trajectories in non-primary partitions of the
+    # OBJECTS/AGENTS layer. This fallback also handles custom agent attributes.
+    try:
+        objects_key = _layer_key_tuple(graph.get_layer_key(layers.OBJECTS))
+        if key[0] == objects_key[0] and key[1] != objects_key[1]:
+            return "AGENTS"
+    except Exception:
+        pass
+
+    return f"LAYER_{key[0]}" if key[1] == 0 else f"LAYER_{key[0]}[{key[1]}]"
+
+
+def edge_type_counts(graph: Any, layers: Any) -> dict[str, int]:
+    """Count graph edges by their unordered endpoint layer types."""
+    names_by_key = _layer_names_by_key(graph, layers)
+    rank = {name: index for index, name in enumerate(EDGE_LAYER_ORDER)}
+    counts: collections.Counter[str] = collections.Counter()
+
+    for edge in graph.edges:
+        names = [
+            _edge_layer_name(graph, graph.get_node(edge.source), layers, names_by_key),
+            _edge_layer_name(graph, graph.get_node(edge.target), layers, names_by_key),
+        ]
+        names.sort(key=lambda name: (rank.get(name, len(rank)), name))
+        counts[f"{names[0]} to {names[1]}"] += 1
+
+    return dict(sorted(counts.items()))
+
+
+def agent_node_count(graph: Any, layers: Any) -> int:
+    names_by_key = _layer_names_by_key(graph, layers)
+    return sum(
+        _edge_layer_name(graph, node, layers, names_by_key) == "AGENTS"
+        for node in graph.nodes
+    )
+
+
 def layer_count(graph: Any, layer: Any) -> int:
     try:
         return graph.get_layer(layer).num_nodes()
@@ -60,6 +156,7 @@ def summarize(path: Path) -> dict[str, Any]:
         else 0
         for name in layer_names
     }
+    layer_counts["AGENTS"] = agent_node_count(graph, layers)
     objects_layer = layers.OBJECTS
     object_count = layer_counts["OBJECTS"]
     agent_count = layer_counts["AGENTS"]
@@ -97,6 +194,7 @@ def summarize(path: Path) -> dict[str, Any]:
 
     return {
         "graph": {"nodes": graph.num_nodes(), "edges": graph.num_edges()},
+        "edge_types": edge_type_counts(graph, layers),
         "layers": layer_counts,
         "object_labels": dict(labels.most_common()),
         "mesh": {"vertices": mesh_vertices, "faces": mesh_faces},
@@ -104,10 +202,41 @@ def summarize(path: Path) -> dict[str, Any]:
     }
 
 
+def inspection_view(summary: dict[str, Any]) -> dict[str, Any]:
+    """Return the static graph fields exposed by human and JSON inspection."""
+    edge_types = {
+        name: count
+        for name, count in summary["edge_types"].items()
+        if "AGENTS" not in name.split(" to ")
+    }
+    layers = {
+        name: count for name, count in summary["layers"].items() if name != "AGENTS"
+    }
+    agent_nodes = summary["layers"].get("AGENTS", 0)
+    agent_edges = sum(summary["edge_types"].values()) - sum(edge_types.values())
+    return {
+        "graph": {
+            "nodes": summary["graph"]["nodes"] - agent_nodes,
+            "edges": summary["graph"]["edges"] - agent_edges,
+        },
+        "edge_types": edge_types,
+        "layers": layers,
+        "object_labels": summary["object_labels"],
+    }
+
+
 def print_human(summary: dict[str, Any]) -> None:
+    summary = inspection_view(summary)
     print("Graph:")
     print(f"  nodes: {summary['graph']['nodes']}")
     print(f"  edges: {summary['graph']['edges']}")
+    print("\nEdges by type:")
+    if summary["edge_types"]:
+        width = max(map(len, summary["edge_types"]))
+        for edge_type, count in summary["edge_types"].items():
+            print(f"  {edge_type:<{width}}  {count}")
+    else:
+        print("  (none)")
     print("\nLayers:")
     for name, count in summary["layers"].items():
         print(f"  {name}: {count}")
@@ -118,10 +247,6 @@ def print_human(summary: dict[str, Any]) -> None:
             print(f"  {label:<{width}}  {count}")
     else:
         print("  (none)")
-    print("\nMesh:")
-    print(f"  vertices: {summary['mesh']['vertices']}")
-    print(f"  faces: {summary['mesh']['faces']}")
-    print(f"\nTrajectory: {'present' if summary['trajectory_exists'] else 'missing'}")
 
 
 def acceptance_errors(summary: dict[str, Any]) -> list[str]:
@@ -134,7 +259,11 @@ def acceptance_errors(summary: dict[str, Any]) -> list[str]:
         errors.append("AGENTS/trajectory must contain at least one node")
     if summary["mesh"]["vertices"] <= 0:
         errors.append("mesh must contain vertices")
-    valid_labels = {key: value for key, value in summary["object_labels"].items() if key not in {"unknown", "None", "0"}}
+    valid_labels = {
+        key: value
+        for key, value in summary["object_labels"].items()
+        if key not in {"unknown", "None", "0"}
+    }
     if not valid_labels:
         errors.append("at least one object must have a valid semantic label")
     return errors
@@ -156,7 +285,7 @@ def main() -> int:
         return 1
 
     if args.as_json:
-        print(json.dumps(summary, indent=2, sort_keys=True))
+        print(json.dumps(inspection_view(summary), indent=2, sort_keys=True))
     else:
         print_human(summary)
 
