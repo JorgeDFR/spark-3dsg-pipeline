@@ -80,9 +80,11 @@ def test_uhumans2_profile_uses_core_hydra_hierarchy():
     assert config["active_window"]["type"] == "ReconstructionModule"
     assert config["input"]["inputs"]["camera"]["receiver"]["type"] == "ClosedSetImageReceiver"
     assert config["frontend"]["enable_mesh_objects"] is True
+    assert config["frontend"]["surface_places"]["type"] == "place_2d"
     assert config["frontend"]["freespace_places"]["type"] == "gvd"
     functors = config["backend"]["update_functors"]
     assert functors["objects"]["type"] == "UpdateObjectsFunctor"
+    assert functors["surface_places"]["type"] == "Update2dPlacesFunctor"
     assert functors["places"]["type"] == "UpdatePlacesFunctor"
     assert functors["rooms"]["type"] == "UpdateRoomsFunctor"
     assert functors["buildings"]["type"] == "UpdateBuildingsFunctor"
@@ -287,7 +289,8 @@ def test_rviz_uses_package_visualization_launch_and_dataset_frame():
     assert "--get frames.map" in wrapper
     assert "hydra_visualizer)/launch/streaming_visualizer.launch.yaml" in launch
     assert "visualizer_frame, value: $(var map_frame)" in launch
-    assert "external_plugins_path, value: $(var visualizer_overlay_path)" in launch
+    assert "visualizer_config_path, value: $(var visualizer_config_path)" in launch
+    assert "name: visualizer_overlay_path" not in launch
     assert "--fixed-frame $(var map_frame)" in launch
     for topic in (
         "/hydra_visualizer/mesh",
@@ -303,7 +306,7 @@ def test_visualization_uses_rgb_mesh_colors_and_displayable_semantic_overlay():
         (package / "config/perception/yoloe.yaml").read_text()
     )
     visualizer_config = yaml.safe_load(
-        (package / "config/visualization/adt4.yaml").read_text()
+        (package / "config/visualization/hydra_visualizer.yaml").read_text()
     )
     perception_launch = (package / "launch/perception.launch.yaml").read_text()
     rviz = (package / "rviz/scene_graph.rviz").read_text()
@@ -316,6 +319,60 @@ def test_visualization_uses_rgb_mesh_colors_and_displayable_semantic_overlay():
     assert "/input/semantic/overlay" in rviz
     assert "/input/semantic/instances" not in rviz
     assert visualizer_config["plugins"]["mesh"]["coloring"]["type"] == ""
+
+
+def test_visualizer_config_is_complete_and_matches_locked_schema():
+    config_dir = ROOT / "src/spark_3dsg_pipeline/config/visualization"
+    config_path = config_dir / "hydra_visualizer.yaml"
+    assert [path.name for path in config_dir.glob("*.yaml")] == [config_path.name]
+    assert_yaml_has_unique_keys(config_path)
+
+    config = yaml.safe_load(config_path.read_text())
+    assert config["loop_period_s"] > 0
+    assert config["graph"] == {"type": "GraphFromRos", "wrapper_ns": "~"}
+    assert config["plugins"]["mesh"]["type"] == "MeshPlugin"
+    assert config["plugins"]["mesh"]["coloring"]["type"] == ""
+
+    renderer = config["renderer"]
+    assert {str(key) for key in renderer["layers"]} == {
+        "2",
+        "3",
+        "4",
+        "5",
+        "2p*",
+        "3p1",
+        "3p2",
+    }
+    required_layer_fields = {
+        "visualize",
+        "z_offset_scale",
+        "draw_frontier_ellipse",
+        "nodes",
+        "edges",
+        "text",
+        "bounding_boxes",
+        "boundaries",
+    }
+    for layer in renderer["layers"].values():
+        assert set(layer) == required_layer_fields
+
+    active_keys = set()
+
+    def collect_keys(value):
+        if isinstance(value, dict):
+            active_keys.update(str(key) for key in value)
+            for child in value.values():
+                collect_keys(child)
+        elif isinstance(value, list):
+            for child in value:
+                collect_keys(child)
+
+    collect_keys(config)
+    assert "use_color_adaptor" not in active_keys
+    assert "visualizer_frame" not in active_keys
+    raw = config_path.read_text()
+    assert "ADT4 default alternative" in raw
+    assert "ADT4 classic alternative" in raw
 
 
 def test_lint_validates_every_installed_launch_file():

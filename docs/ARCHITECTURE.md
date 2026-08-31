@@ -15,7 +15,8 @@ bag/dataset adapter
             |
             +-> recorded ground-truth semantics
                     -> Hydra ReconstructionModule
-                    -> OBJECTS + PLACES + ROOMS + BUILDINGS
+                    -> OBJECTS + MESH_PLACES
+                    -> PLACES + ROOMS + BUILDINGS
                                       |
                                       v
                               Hydra backend + Spark-DSG

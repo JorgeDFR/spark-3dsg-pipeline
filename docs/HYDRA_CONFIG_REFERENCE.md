@@ -33,7 +33,7 @@ The repository intentionally provides exactly three defaults:
 |---|---|---|---|
 | `adt4.yaml` | RGB-D plus online packed YOLOE instances | Khronos `ActiveWindow` | `OBJECTS`, `MESH_PLACES`, `AGENTS`, mesh |
 | `classic.yaml` | RGB-D plus online packed YOLOE instances | Khronos `ActiveWindow` with semantic TSDF | `OBJECTS`, `MESH_PLACES`, `PLACES`, `ROOMS`, `AGENTS`, mesh |
-| `uhumans2.yaml` | uHumans2 office RGB-D plus recorded class IDs | Hydra `ReconstructionModule` | `OBJECTS`, `PLACES`, `ROOMS`, `BUILDINGS`, `AGENTS`, mesh |
+| `uhumans2.yaml` | uHumans2 office RGB-D plus recorded class IDs | Hydra `ReconstructionModule` | `OBJECTS`, `MESH_PLACES`, `PLACES`, `ROOMS`, `BUILDINGS`, `AGENTS`, mesh |
 
 The `spot` and `custom_rgbd` adapters select `adt4.yaml`; the `uhumans2`
 adapter selects `uhumans2.yaml`. An explicit compatible profile can be selected
@@ -202,6 +202,8 @@ BUILDINGS
     └── ROOMS
         └── PLACES
             └── OBJECTS
+
+MESH_PLACES
 ```
 
 The actual set and parentage must be checked with `make inspect`; having a YAML
@@ -599,6 +601,7 @@ recorded class IDs
   -> ClosedSetImageReceiver
   -> semantic ReconstructionModule
   -> semantic mesh object clustering -> OBJECTS
+  -> labeled mesh surfaces -> MESH_PLACES
   -> GVD -> PLACES -> ROOMS -> BUILDINGS
 ```
 

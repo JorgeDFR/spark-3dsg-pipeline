@@ -21,8 +21,9 @@ The v1 semantic contract is:
 - `AGENTS`: robot trajectory nodes
 - mesh: embedded in the DSG or present as `mesh.ply`
 
-The uHumans2 core-Hydra demo instead expects classical `PLACES`, `ROOMS`, and
-`BUILDINGS` in addition to `OBJECTS`, `AGENTS`, and the mesh.
+The uHumans2 core-Hydra demo expects surface `MESH_PLACES` plus classical GVD
+`PLACES`, `ROOMS`, and `BUILDINGS` in addition to `OBJECTS`, `AGENTS`, and the
+mesh.
 
 The classic profile retains ADT4 surface `MESH_PLACES` and additionally creates
 GVD `PLACES` and structural `ROOMS`; it does not add a `BUILDINGS` layer.

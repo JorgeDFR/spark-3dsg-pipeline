@@ -9,7 +9,7 @@ def test_known_dataset_resolves():
     config = load_config("custom_rgbd")
     assert get_value(config, "frames.sensor") == "camera_color_optical_frame"
     assert config["semantics_source"] == "online"
-    assert config["hydra_config"] == "adt4.yaml"
+    assert config["hydra_config"] == "classic.yaml"
 
 
 def test_dataset_topics_have_normalized_targets():

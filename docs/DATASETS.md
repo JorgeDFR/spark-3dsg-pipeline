@@ -16,9 +16,9 @@ structural `ROOMS`.
 
 `uhumans2.yaml` supplies the inexpensive CPU demo with recorded ground-truth
 semantic images. Its core-Hydra profile produces classical `OBJECTS`, GVD
-`PLACES`, `ROOMS`, and `BUILDINGS` without loading Khronos. It catches ROS, TF,
-startup, serialization, dependency, and DSG parsing regressions; it is not the
-default modern perception architecture.
+`PLACES`, surface `MESH_PLACES`, `ROOMS`, and `BUILDINGS` without loading
+Khronos. It catches ROS, TF, startup, serialization, dependency, and DSG parsing
+regressions; it is not the default modern perception architecture.
 
 ## Custom RGB-D
 

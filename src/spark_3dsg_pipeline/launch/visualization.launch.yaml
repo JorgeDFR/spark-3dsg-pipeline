@@ -3,14 +3,14 @@ launch:
   - arg: {name: map_frame, default: map}
   - arg: {name: use_sim_time, default: 'true'}
   - arg: {name: rviz_path, default: $(find-pkg-share spark_3dsg_pipeline)/rviz/scene_graph.rviz}
-  - arg: {name: visualizer_overlay_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/visualization/adt4.yaml}
+  - arg: {name: visualizer_config_path, default: /home/spark/ros_ws/src/spark_3dsg_pipeline/config/visualization/hydra_visualizer.yaml}
   - set_parameter: {name: use_sim_time, value: $(var use_sim_time)}
   - set_remap: {from: hydra_visualizer/dsg, to: hydra/backend/dsg}
   - include:
       file: $(find-pkg-share hydra_visualizer)/launch/streaming_visualizer.launch.yaml
       arg:
         - {name: visualizer_frame, value: $(var map_frame)}
-        - {name: external_plugins_path, value: $(var visualizer_overlay_path)}
+        - {name: visualizer_config_path, value: $(var visualizer_config_path)}
         - {name: start_rviz, value: 'false'}
   - node:
       pkg: rviz2

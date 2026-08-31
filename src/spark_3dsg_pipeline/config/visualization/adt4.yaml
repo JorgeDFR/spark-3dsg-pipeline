@@ -1,8 +1,0 @@
----
-# Keep upstream external plugin loading disabled while overriding its default
-# semantic mesh coloring. The ADT4 profile does not integrate dense semantic
-# mesh labels, so an unset coloring adapter makes MeshPlugin use vertex RGB.
-external_libraries: {enabled: false}
-plugins:
-  mesh:
-    coloring: {type: ''}
