@@ -1,5 +1,5 @@
-# Generated from ../adt4-public.repos and captured 2026-08-27.
-# Docker builds consume this file, never the floating manifest.
+# Immutable v1 dependency snapshot captured 2026-08-27.
+# Docker builds consume this exact-SHA lock.
 repositories:
   hydra:
     type: git

@@ -2,8 +2,8 @@
 launch:
   - arg: {name: use_sim_time, default: 'true'}
   - arg: {name: env_path, default: /home/spark/.venvs/semantic_inference}
-  - arg: {name: perception_config_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/perception/yoloe.yaml}
-  - set_remap: {from: semantic/image_raw, to: /input/semantic/instances}
+  - arg: {name: perception_config_path, description: Resolved model plus labels config}
+  - set_remap: {from: semantic/image_raw, to: /input/semantic/image_raw}
   - set_remap: {from: semantic_overlay/image_raw, to: /input/semantic/overlay}
   - set_remap: {from: labelspace, to: /input/semantic/labelspace}
   - include:

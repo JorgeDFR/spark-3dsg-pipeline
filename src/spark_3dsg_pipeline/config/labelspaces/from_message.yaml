@@ -1,0 +1,3 @@
+---
+# Open-set label names and object IDs arrive on the latched labelspace topic.
+type: from_msg

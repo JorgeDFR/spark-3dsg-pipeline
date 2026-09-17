@@ -81,11 +81,11 @@ def valid_summary():
     }
 
 
-def test_v1_acceptance_passes_complete_graph():
+def test_pipeline_output_acceptance_passes_complete_graph():
     assert acceptance_errors(valid_summary()) == []
 
 
-def test_v1_acceptance_reports_every_missing_component():
+def test_pipeline_output_acceptance_reports_every_missing_component():
     summary = valid_summary()
     summary["layers"] = {
         "OBJECTS": 0,

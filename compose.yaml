@@ -52,16 +52,6 @@ services:
     working_dir: /home/spark/spark-3dsg-pipeline
     command: ["/home/spark/spark-3dsg-pipeline/scripts/prepare_example_bags.py"]
 
-  # Stable v2 service boundary; Make intentionally blocks building it in v1.
-  daaam:
-    <<: *common
-    profiles: [daaam]
-    image: spark-3dsg-daaam:local
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.daaam
-    gpus: all
-
   rviz:
     <<: *common
     profiles: [rviz]
@@ -79,7 +69,7 @@ services:
       - spark-cache:/home/spark/.cache
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ./scripts:/home/spark/spark-3dsg-pipeline/scripts #TEMP
-    command: ["/home/spark/spark-3dsg-pipeline/scripts/run_visualization.sh", "spot"]
+    command: ["/home/spark/spark-3dsg-pipeline/scripts/run_visualization.sh", "--dataset", "spot"]
     gpus: all
 
 volumes:

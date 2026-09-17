@@ -1,11 +1,9 @@
 name: custom_rgbd
-description: Template RGB-D bag with online instance segmentation
+description: Generic RGB-D bag with online closed-set semantic segmentation
 topics:
   color: /camera/color/image_raw
   depth: /camera/aligned_depth_to_color/image_raw
   camera_info: /camera/color/camera_info
-  instances: /input/semantic/instances
-  labelspace: /input/semantic/labelspace
   tf: /tf
   tf_static: /tf_static
 frames:
@@ -16,6 +14,15 @@ frames:
 depth_scale: 1000.0
 depth_encodings: [16UC1, 32FC1]
 use_sim_time: true
-semantics_source: online
-hydra_config: adt4.yaml
+scene_structure: hierarchical
+semantics:
+  source: closed_set
+  model_file: ade20k-efficientvit_seg_l2.onnx
+  model_config: semantic_inference_ros:config/models/ade20k-efficientvit_seg_l2.yaml
+  labelspace_name: ade20k_mit
+  grouping_config: semantic_inference_ros:config/label_groupings/ade20k_mit.yaml
+  labelspace_config: hydra:config/label_spaces/ade20k_mit_label_space.yaml
+  pipeline_config: spark_3dsg_pipeline:config/labelspaces/no_remap.yaml
+visualization: {profile: hierarchical}
+hydra_config: classic.yaml
 playback_rate: 1.0

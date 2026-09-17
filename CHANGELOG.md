@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Separate scene structure, semantic source/taxonomy, and visualization profile
+  in dataset adapters, with fail-fast compatibility checks.
+- Rebuild `classic.yaml` as hierarchical Hydra reconstruction with online
+  closed-set semantics and externalize uHumans2 taxonomy/remapping.
+- Split YOLOE model settings from replaceable ADT4 prompts and add independent
+  closed-set/open-set perception launches.
+- Add hierarchical and Khronos renderer profiles plus native saved-DSG JSON
+  visualization.
+- Define `v1` solely as the immutable exact-SHA upstream snapshot, rename the
+  output acceptance flag, and remove unavailable pipeline placeholders.
 - Add Docker-first core and GPU profiles.
 - Add exact public dependency locks and upstream provenance.
 - Add the `spark_3dsg_pipeline` ROS 2 integration package and dataset adapters.

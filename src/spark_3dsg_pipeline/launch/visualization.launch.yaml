@@ -3,15 +3,27 @@ launch:
   - arg: {name: map_frame, default: map}
   - arg: {name: use_sim_time, default: 'true'}
   - arg: {name: rviz_path, default: $(find-pkg-share spark_3dsg_pipeline)/rviz/scene_graph.rviz}
-  - arg: {name: visualizer_config_path, default: /home/spark/ros_ws/src/spark_3dsg_pipeline/config/visualization/hydra_visualizer.yaml}
+  - arg: {name: visualizer_config_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/visualization/hierarchical.yaml}
+  - arg: {name: file_mode, default: 'false'}
+  - arg: {name: scene_graph, default: ''}
   - set_parameter: {name: use_sim_time, value: $(var use_sim_time)}
   - set_remap: {from: hydra_visualizer/dsg, to: hydra/backend/dsg}
   - include:
+      unless: $(var file_mode)
       file: $(find-pkg-share hydra_visualizer)/launch/streaming_visualizer.launch.yaml
       arg:
         - {name: visualizer_frame, value: $(var map_frame)}
         - {name: visualizer_config_path, value: $(var visualizer_config_path)}
         - {name: start_rviz, value: 'false'}
+  - node:
+      if: $(var file_mode)
+      pkg: hydra_visualizer
+      exec: hydra_visualizer_node
+      name: hydra_visualizer
+      on_exit: shutdown
+      args: >
+        --config-utilities-file $(var visualizer_config_path)
+        --config-utilities-yaml {graph: {type: GraphFromFile, frame_id: $(var map_frame), filepath: $(var scene_graph)}}
   - node:
       pkg: rviz2
       exec: rviz2

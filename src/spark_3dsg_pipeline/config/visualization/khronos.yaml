@@ -1,0 +1,64 @@
+---
+# Khronos renderer: OBJECTS + MESH_PLACES (+ AGENTS when present).
+loop_period_s: 0.1
+graph: {type: GraphFromRos, wrapper_ns: "~"}
+plugins:
+  mesh: {type: MeshPlugin, min_mesh_separation_s: 0.0, coloring: {type: ''}}
+  khronos_objects:
+    type: KhronosObjectPlugin
+    queue_size: 100
+    dynamic_color_mode: CONSTANT
+    id_color_revolutions: 10
+    dynamic_color: [255, 105, 180]
+    dynamic_bbox_scale: 0.05
+    layer: OBJECTS
+  places_traversability:
+    type: TraversabilityPlugin
+    layer: MESH_PLACES
+    colors: [[128, 128, 128], [0, 0, 255], [255, 0, 0], [0, 255, 0]]
+    slice_height: 2.0
+    line_width: 0.07
+  agent_poses: {type: PosePlugin, num_to_skip: 0, layer: AGENTS, num_received_before_warn: 500}
+renderer:
+  layer_z_step: 2.0
+  collapse_layers: false
+  layers:
+    2:
+      visualize: true
+      z_offset_scale: 1.0
+      draw_frontier_ellipse: false
+      nodes: {draw: true, scale: 0.4, color: {type: LabelColorAdapter, colormap: {palette: {type: distinct150}, default_color: [128, 128, 128], wrap_colors: true}}, alpha: 0.8, use_sphere: false}
+      edges: {draw: true, scale: 0.03, alpha: 0.5, color: {type: ''}, insertion_skip: 0}
+      text: {draw: true, draw_layer: false, collapse: true, adapter: {type: LabelTextAdapter}, height: 0.5, scale: 0.45, add_jitter: false, jitter_scale: 0.2, color: black}
+      bounding_boxes: {draw: true, collapse: true, scale: 0.05, edge_scale: 0.05, alpha: 0.9, edge_break_ratio: 0.5}
+      boundaries: {draw: false, collapse: false, wireframe_scale: 0.1, use_node_color: true, alpha: 0.5, draw_ellipse: false, ellipse_alpha: 0.5}
+    2p*:
+      visualize: true
+      z_offset_scale: 0.0
+      draw_frontier_ellipse: false
+      nodes: {draw: true, scale: 0.1, color: {type: PartitionColorAdapter, colormap: {palette: {type: colorbrewer}, default_color: [128, 128, 128], wrap_colors: true}}, alpha: 1.0, use_sphere: true}
+      edges: {draw: true, scale: 0.1, alpha: 1.0, color: {type: ''}, insertion_skip: 0}
+      text: {draw: false, draw_layer: true, collapse: false, adapter: {type: IdTextAdapter}, height: 0.9, scale: 0.8, add_jitter: false, jitter_scale: 0.2, color: black}
+      bounding_boxes: {draw: false, collapse: false, scale: 0.1, edge_scale: 0.01, alpha: 0.5, edge_break_ratio: 0.5}
+      boundaries: {draw: false, collapse: false, wireframe_scale: 0.1, use_node_color: true, alpha: 0.5, draw_ellipse: false, ellipse_alpha: 0.5}
+    3p1:
+      visualize: true
+      z_offset_scale: 2.0
+      draw_frontier_ellipse: false
+      nodes: {draw: true, scale: 0.2, color: {type: LabelColorAdapter, colormap: {palette: {type: distinct150}, default_color: [128, 128, 128], wrap_colors: true}}, alpha: 0.9, use_sphere: true}
+      edges: {draw: true, scale: 0.03, alpha: 0.5, color: {type: ''}, insertion_skip: 0}
+      text: {draw: false, draw_layer: false, collapse: false, adapter: {type: IdTextAdapter}, height: 0.5, scale: 0.45, add_jitter: false, jitter_scale: 0.2, color: black}
+      bounding_boxes: {draw: false, collapse: false, scale: 0.1, edge_scale: 0.01, alpha: 0.5, edge_break_ratio: 0.5}
+      boundaries: {draw: true, collapse: false, wireframe_scale: 0.1, use_node_color: true, alpha: 1.0, draw_ellipse: false, ellipse_alpha: 0.5}
+    3p2:
+      visualize: false
+      z_offset_scale: 2.0
+      draw_frontier_ellipse: false
+      nodes: {draw: true, scale: 0.2, color: {type: IdColorAdapter, colormap: {palette: {type: colorbrewer}, default_color: [128, 128, 128], wrap_colors: true}}, alpha: 0.9, use_sphere: true}
+      edges: {draw: true, scale: 0.1, alpha: 0.8, color: {type: TraversabilityEdgeColorAdapter}, insertion_skip: 0}
+      text: {draw: false, draw_layer: false, collapse: true, adapter: {type: IdTextAdapter}, height: 0.5, scale: 0.45, add_jitter: false, jitter_scale: 0.2, color: black}
+      bounding_boxes: {draw: false, collapse: false, scale: 0.1, edge_scale: 0.01, alpha: 0.5, edge_break_ratio: 0.5}
+      boundaries: {draw: true, collapse: false, wireframe_scale: 0.1, use_node_color: true, alpha: 1.0, draw_ellipse: false, ellipse_alpha: 0.5}
+  interlayer_edges:
+    - {from: 3*, to: 2p*, draw: false, scale: 0.03, alpha: 1.0, color: {type: ''}, insertion_skip: 0, use_child_color: false}
+    - {from: 3*, to: 2, draw: true, scale: 0.08, alpha: 0.5, color: {type: ''}, insertion_skip: 0, use_child_color: true}

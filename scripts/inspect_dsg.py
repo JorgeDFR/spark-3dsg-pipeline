@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize a serialized Spark-DSG and optionally enforce v1 acceptance."""
+"""Summarize a serialized Spark-DSG and optionally enforce output acceptance."""
 
 from __future__ import annotations
 
@@ -273,7 +273,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("dsg", type=Path)
     parser.add_argument("--json", action="store_true", dest="as_json")
-    parser.add_argument("--require-v1", action="store_true", help="enforce the Spot v1 output contract")
+    parser.add_argument(
+        "--require-pipeline-output",
+        action="store_true",
+        help="require objects, mesh places, trajectory, mesh, and semantic labels",
+    )
     args = parser.parse_args()
 
     if not args.dsg.is_file():
@@ -289,7 +293,7 @@ def main() -> int:
     else:
         print_human(summary)
 
-    if args.require_v1:
+    if args.require_pipeline_output:
         errors = acceptance_errors(summary)
         for error in errors:
             print(f"acceptance failure: {error}", file=sys.stderr)

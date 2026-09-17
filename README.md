@@ -1,97 +1,100 @@
 # spark-3dsg-pipeline
 
-An unofficial, reproducible integration environment for constructing 3D Dynamic Scene Graphs with public MIT-SPARK software. This repository owns Docker images, exact dependency locks, ROS 2 launch composition, dataset adapters, validation, output handling, and tests. Hydra, Khronos, Spark-DSG, and semantic inference remain upstream projects.
+Docker/ROS integration for building Spark-DSG scene graphs with the public
+MIT-SPARK stack. The repository owns launch, configuration, validation, and
+reproducibility glue; Hydra, Khronos, Spark-DSG, and semantic inference remain
+upstream components.
 
-The v1 pipeline is headless by default:
+The pipeline has three independent dimensions: graph structure, semantic
+source/taxonomy, and visualization profile. Dataset adapters select compatible
+defaults without deriving one dimension from a Hydra filename.
 
-```text
-RGB-D + TF/odometry -> YOLOE or recorded instances -> Khronos/Hydra -> Spark-DSG
-                                                                      |
-                                 mesh-free dsg.json + mesh.ply + metadata.json
-```
+| Example/config | Scene structure | Semantic source | Perception |
+| --- | --- | --- | --- |
+| `uhumans2.yaml` | hierarchical | recorded class IDs | none |
+| `classic.yaml` | hierarchical | online closed-set | `semantic_inference` closed-set |
+| `adt4.yaml` | Khronos | online open-set | YOLOE |
 
-## Status
+The hierarchical graph is `OBJECTS -> PLACES -> ROOMS -> BUILDINGS`.
+`MESH_PLACES` is a decoupled 2D/surface representation. The Khronos graph has
+`OBJECTS` and `MESH_PLACES`, with the ADT4 object-to-mesh-place connection.
 
-The repository provides the Docker/ROS integration and CPU-testable tooling. A full Spot run requires an NVIDIA GPU, external YOLOE weights, and the public Spot bag; those assets are deliberately not committed. DAAAM is documented as a follow-on profile and is not part of the v1 dependency set.
+## Setup
 
-## Host requirements
-
-- Linux, Git, GNU Make, Docker Engine, and Docker Compose v2
-- For `PROFILE=gpu`: an NVIDIA driver and NVIDIA Container Toolkit
-
-Do not install ROS, CUDA Toolkit, colcon, GTSAM, or Python ML packages on the host.
-
-## Example ROS bags
-
-Download and preparation instructions for the public Spot and uHumans2 examples are maintained in [data/README.md](data/README.md). Prepare an example before following the quick start below.
-
-## Quick start
+Host requirements are Docker and, for GPU execution, an NVIDIA driver plus
+NVIDIA Container Toolkit. Do not install ROS, CUDA, or runtime Python packages
+on the host.
 
 ```bash
 cp .env.example .env
+make build PROFILE=core
 make build PROFILE=gpu
 make models PROFILE=gpu
-make validate-bag PROFILE=gpu BAG=/home/spark/data/spot
-make run PROFILE=gpu BAG=/home/spark/data/spot
-make inspect DSG=/home/spark/output/<run-id>/dsg.json
 ```
 
-`BAG` and `DSG` are container paths. The defaults mount `./data` read-only at `/home/spark/data`, `./models` at `/home/spark/models`, `./output` at `/home/spark/output`, and the persistent cache volume at `/home/spark/.cache`. The project is installed at `/home/spark/spark-3dsg-pipeline`; the image's internal upstream workspace is `/home/spark/ros_ws`. Change the host-side paths in `.env` for external storage.
+`make models` downloads and checksums both the closed-set ONNX model and YOLOE
+weights into the mounted model directory. See [model setup](docs/MODELS.md).
 
-Containers run as the non-root `spark` user. Its UID and GID are set at image build time from `HOST_UID` and `HOST_GID` in `.env`, so files written under the bind-mounted model and output directories belong to the host user. The example values are `1000`; if your account differs, use `id -u` and `id -g` to set the correct values before building. Rebuild the images after changing either value.
-
-## Editing the integration package
-
-The repository-owned ROS package is [src/spark_3dsg_pipeline](src/spark_3dsg_pipeline); the repository itself does not imitate a complete ROS workspace. Compose mounts this package at `/home/spark/ros_ws/src/spark_3dsg_pipeline` over the copy used during the image build. The workspace is built with `colcon --symlink-install`, so edits to existing launch, configuration, and RViz files are visible in newly started containers without rebuilding the image. Rebuild after changing `package.xml`, `CMakeLists.txt`, or compiled dependencies.
-
-Every run creates `/home/spark/output/<UTC timestamp>-<dataset>/`. The run wrapper records the resolved dataset configuration, upstream lock hash, command, and logs. Hydra/Khronos are asked to stop when simulated time ends; the wrapper then writes a normalized, mesh-free `dsg.json` from the backend graph, extracts the backend mesh to `mesh.ply` when available, and fails if no backend DSG JSON was produced. Original Hydra/Khronos outputs remain unchanged under `upstream/`.
-
-## Commands
-
-Run `make help` for the complete interface. Common commands are:
+## Mapping examples
 
 ```bash
-make build PROFILE=core|gpu
-make models PROFILE=gpu
-make prepare-data
-make shell PROFILE=core|gpu
-make validate-bag PROFILE=gpu DATASET=spot BAG=/home/spark/data/spot
+# Recorded uHumans2 semantics; no inference node.
+make run PROFILE=core DATASET=uhumans2 BAG=/home/spark/data/uhumans2
+
+# Generic hierarchical mapping with ADE20K closed-set inference.
+make run PROFILE=gpu DATASET=custom_rgbd BAG=/home/spark/data/my_rgbd
+
+# ADT4/Spot Khronos example with the default open-set taxonomy.
 make run PROFILE=gpu DATASET=spot BAG=/home/spark/data/spot
-make inspect DSG=/home/spark/output/run/dsg.json
-make test
-make lint
+
+# Same mapper and model settings, different YOLOE taxonomy.
+make run PROFILE=gpu DATASET=spot BAG=/home/spark/data/spot \
+  LABELS_CONFIG=/home/spark/data/my_labels.yaml
 ```
 
-RViz is optional and requires host display forwarding:
+An open-set labels file is a small overlay:
+
+```yaml
+model:
+  instance_model:
+    text_prompt: [ignore, chair, mug]
+```
+
+Outputs are written below `/home/spark/output`. Each run records
+`pipeline_version: v1` and a `dependency_lock_hash`; here `v1` means only the
+immutable upstream snapshot in `dependencies/locks/v1.lock.repos`.
+
+## Visualization and inspection
 
 ```bash
-make rviz PROFILE=gpu DATASET=spot
+# Live graph, profile selected by the dataset adapter.
+make rviz DATASET=spot
+
+# Saved graph, profile selected by the adapter.
+make rviz DATASET=spot DSG=/home/spark/output/run/dsg.json
+
+# Saved graph without a dataset adapter.
+make rviz DSG=/home/spark/output/run/dsg.json \
+  VISUALIZATION_PROFILE=hierarchical
+
+make inspect DSG=/home/spark/output/run/dsg.json \
+  INSPECT_ARGS=--require-pipeline-output
 ```
 
-The visualization command resolves the adapter's map frame, starts the Hydra
-streaming visualizer, and then starts RViz with the DSG mesh, graph-marker, and
-agent-trajectory displays. Run it while the headless pipeline is active.
+The pinned visualizer loads saved JSON directly through `GraphFromFile`; Hydra
+or Khronos need not be running in file mode.
 
-## Inputs and outputs
-
-The normalized interface and frame requirements are in [docs/INPUT_CONTRACT.md](docs/INPUT_CONTRACT.md). Add a robot by creating one dataset YAML file; do not fork the core launch. See [docs/CUSTOM_SENSOR.md](docs/CUSTOM_SENSOR.md).
-
-The graph inspection command supports human-readable and machine-readable output. Both formats summarize the static graph and include edge counts grouped by endpoint layer type; agent trajectory nodes, agent edges, and mesh statistics are omitted. The `--require-v1` option still validates the required trajectory and mesh internally.
+## Tests
 
 ```bash
-make inspect DSG=/home/spark/output/run/dsg.json
-make inspect DSG=/home/spark/output/run/dsg.json INSPECT_ARGS=--json
+make test PROFILE=core
+make lint PROFILE=core
 ```
 
-The three supported graph profiles (`adt4.yaml`, `classic.yaml`, and
-`uhumans2.yaml`) and their tuning surfaces are described in
-[docs/HYDRA_CONFIG_REFERENCE.md](docs/HYDRA_CONFIG_REFERENCE.md). See also
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
-[docs/DATASETS.md](docs/DATASETS.md), and
-[docs/DEBUGGING.md](docs/DEBUGGING.md) before running a large bag.
+Repository-only tests may also run from the ignored `.venv`. GPU/runtime smoke
+tests are described in [debugging](docs/DEBUGGING.md). Model, bag, mesh, and
+output artifacts remain untracked.
 
-## Reproducibility
-
-Docker builds import [dependencies/locks/adt4.lock.repos](dependencies/locks/adt4.lock.repos), which contains exact commit SHAs and only HTTPS URLs. [dependencies/adt4-public.repos](dependencies/adt4-public.repos) is the human-updatable branch manifest and is never consumed by an image build. The architectural reference point and the Hydra/Hydra-ROS monorepo transition are recorded in [dependencies/UPSTREAM_BASELINE.md](dependencies/UPSTREAM_BASELINE.md).
-
-This project is not affiliated with or endorsed by MIT or MIT-SPARK. Upstream projects and model weights retain their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Further detail: [architecture](docs/ARCHITECTURE.md), [datasets](docs/DATASETS.md),
+[input contract](docs/INPUT_CONTRACT.md), and
+[Hydra configuration reference](docs/HYDRA_CONFIG_REFERENCE.md).

@@ -27,7 +27,8 @@ PY
 
 for launch_file in \
   bag.launch.yaml \
-  perception.launch.yaml \
+  perception_closed_set.launch.yaml \
+  perception_open_set.launch.yaml \
   pipeline.launch.yaml \
   visualization.launch.yaml; do
   ros2 launch spark_3dsg_pipeline "$launch_file" --show-args >/dev/null

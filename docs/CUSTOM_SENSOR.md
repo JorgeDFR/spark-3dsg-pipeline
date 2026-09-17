@@ -1,21 +1,25 @@
-# Custom sensor or bag
+# Custom RGB-D sensor
 
-1. Copy `src/spark_3dsg_pipeline/config/datasets/custom_rgbd.yaml` to a descriptive dataset name.
-2. Set the original bag topics and exact TF frame IDs.
-3. Set `depth_scale` and permitted encodings.
-4. Choose `semantics_source: online` or `precomputed`.
-5. Build the appropriate image and validate the bag.
+Copy `config/datasets/custom_rgbd.yaml` and change source topics, frames, depth
+scale/encodings, and playback rate. Keep the dimensions explicit:
 
-```bash
-make validate-bag PROFILE=core DATASET=my_robot BAG=/home/spark/data/my_robot
+```yaml
+scene_structure: hierarchical
+semantics:
+  source: closed_set
+  model_file: ade20k-efficientvit_seg_l2.onnx
+  model_config: semantic_inference_ros:config/models/ade20k-efficientvit_seg_l2.yaml
+  labelspace_name: ade20k_mit
+  grouping_config: semantic_inference_ros:config/label_groupings/ade20k_mit.yaml
+  labelspace_config: hydra:config/label_spaces/ade20k_mit_label_space.yaml
+visualization: {profile: hierarchical}
+hydra_config: classic.yaml
 ```
 
-Resolve every error before mapping. Warnings mean bounded sampling could not prove a property and should be checked with `ros2 bag info`/`ros2 bag play` inside `make shell`.
+For recorded IDs, set `source: recorded`, provide `topics.semantic`, and point
+`labelspace_config` at a matching Hydra taxonomy/remap overlay. For Khronos
+open-set mapping, start from `spot.yaml` and set independent `perception_config`
+and `labels_config` resources.
 
-Then run the same core launch:
-
-```bash
-make run PROFILE=gpu DATASET=my_robot BAG=/home/spark/data/my_robot
-```
-
-Do not add dataset conditions to `pipeline.launch.yaml`. Topic normalization belongs in the adapter/bag remaps. Image registration, calibration, odometry generation, and missing TF publication are upstream sensor-pipeline responsibilities.
+Run `make validate-bag` before mapping. New dependencies belong in the Docker
+image and exact-SHA lock, never on the host.

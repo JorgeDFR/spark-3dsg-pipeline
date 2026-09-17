@@ -18,8 +18,7 @@ EXPECTED_TYPES = {
     "color": "sensor_msgs/msg/Image",
     "depth": "sensor_msgs/msg/Image",
     "camera_info": "sensor_msgs/msg/CameraInfo",
-    "instances": "sensor_msgs/msg/Image",
-    "labelspace": "semantic_inference_msgs/msg/Labelspace",
+    "semantic": "sensor_msgs/msg/Image",
     "tf": "tf2_msgs/msg/TFMessage",
     "tf_static": "tf2_msgs/msg/TFMessage",
 }
@@ -172,8 +171,8 @@ def main() -> int:
         report.warn("metadata.yaml unavailable; topic type checks will use the reader only")
 
     required = ["color", "depth", "camera_info", "tf", "tf_static"]
-    if config.get("semantics_source") == "precomputed":
-        required.append("instances")
+    if config["semantics"]["source"] == "recorded":
+        required.append("semantic")
 
     for key in required:
         topic = topics_cfg[key]
@@ -233,10 +232,10 @@ def main() -> int:
     else:
         report.fail("timestamps move backwards within at least one topic")
 
-    if config.get("semantics_source") == "online":
+    if config["semantics"]["source"] != "recorded":
         report.ok("semantics source: online perception (not required in bag)")
     else:
-        report.ok("semantics source: precomputed")
+        report.ok("semantics source: recorded class IDs")
 
     print(f"\nValidation: {report.failures} error(s), {report.warnings} warning(s)")
     return 1 if report.failures else 0

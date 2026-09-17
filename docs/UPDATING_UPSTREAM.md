@@ -1,16 +1,11 @@
-# Updating upstream
+# Updating upstream dependencies
 
-1. Review upstream release notes, branches, licenses, and ROS compatibility.
-2. Update only `dependencies/adt4-public.repos`.
-3. Build the existing core image and run `make lock-dependencies` to resolve exact commits.
-4. Confirm every lock URL is HTTPS and every revision is a 40-character SHA.
-5. Rebuild core from scratch; run lint, unit/smoke tests, then the uHumans2 test.
-6. Run the manual GPU image test and Spot acceptance before merging.
-7. Update `UPSTREAM_BASELINE.md` only when intentionally recapturing ADT4 architecture, not for every dependency refresh.
-8. Review/update `THIRD_PARTY_NOTICES.md`.
+1. Edit `dependencies/upstream-public.repos` as a coordinated compatible set.
+2. Run `make lock-dependencies` in the core Docker image.
+3. Review every exact SHA in `dependencies/locks/v1.lock.repos`.
+4. Update `dependencies/UPSTREAM_BASELINE.md` with provenance and compatibility
+   notes.
+5. Rebuild both images and run CPU plus GPU smoke tests.
 
-For GPU updates, also refresh and test the direct pins in `dependencies/gpu.requirements.txt`; never let the semantic package silently clone its floating `Spark-Config` URL. The image installs the exact locked checkout first and then installs semantic inference with `--no-deps`.
-
-Never hand-edit one SHA to “latest” in isolation. Hydra, Hydra-ROS, Khronos, and Spark-DSG APIs move together. Never merge the DAAAM lock into the standard lock.
-
-The Docker build consumes only `dependencies/locks/adt4.lock.repos`. Repository validation rejects a floating branch in that file.
+Docker consumes only the immutable exact-SHA lock. Never put a branch name in a
+lock file or import split Hydra-ROS alongside the pinned Hydra monorepo.

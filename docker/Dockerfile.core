@@ -34,9 +34,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN rosdep init 2>/dev/null || true && rosdep update --rosdistro jazzy
 
 WORKDIR ${ROS_WS}
-COPY dependencies/locks/adt4.lock.repos /tmp/adt4.lock.repos
+COPY dependencies/locks/v1.lock.repos /tmp/v1.lock.repos
 COPY scripts/bootstrap_dependencies.sh /tmp/bootstrap_dependencies.sh
-RUN /tmp/bootstrap_dependencies.sh ${ROS_WS}/src /tmp/adt4.lock.repos
+RUN /tmp/bootstrap_dependencies.sh ${ROS_WS}/src /tmp/v1.lock.repos
 
 COPY src/spark_3dsg_pipeline src/spark_3dsg_pipeline
 

@@ -15,8 +15,12 @@ topic() {
 color_topic=$(topic color)
 depth_topic=$(topic depth)
 camera_info_topic=$(topic camera_info)
-semantic_topic=$(topic instances)
-labelspace_topic=$(topic labelspace)
+semantics_source=$(python3 "$pipeline_root/scripts/dataset_config.py" "$dataset" --get semantics.source)
+if [[ "$semantics_source" == recorded ]]; then
+  semantic_topic=$(topic semantic)
+else
+  semantic_topic=/input/semantic/image_raw
+fi
 tf_topic=$(topic tf)
 tf_static_topic=$(topic tf_static)
 
@@ -27,6 +31,5 @@ exec ros2 launch spark_3dsg_pipeline bag.launch.yaml \
   depth_topic:="$depth_topic" \
   camera_info_topic:="$camera_info_topic" \
   semantic_topic:="$semantic_topic" \
-  labelspace_topic:="$labelspace_topic" \
   tf_topic:="$tf_topic" \
   tf_static_topic:="$tf_static_topic"

@@ -1,0 +1,30 @@
+---
+# Default open-set taxonomy for the ADT4/DCIST-T4 example.
+model:
+  instance_model:
+    text_prompt:
+      - ignore
+      - chair
+      - cone
+      - bag
+      - table
+      - tree
+      - car
+      - van
+      - truck
+      - bus
+      - bicycle
+      - door
+      - pole
+      - fence
+      - sign
+      - window
+      - bed
+      - box
+      - basket
+      - seating
+      - flag
+      - light
+      - trash
+      - clothes
+      - ball

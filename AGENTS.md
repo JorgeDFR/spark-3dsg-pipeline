@@ -16,7 +16,7 @@ Runtime containers must default to the non-root `spark` user created from `HOST_
 - Fetch dependencies with vcstool over HTTPS.
 - Builds must use exact SHA locks from `dependencies/locks/`.
 - Never put `main`, `master`, `develop`, or another floating ref in a lock file.
-- The v1 Hydra lock is a public monorepo snapshot that already contains the
+- The v1 dependency lock uses a Hydra public monorepo snapshot that already contains the
   `hydra_ros` packages. Do not also import the split Hydra-ROS repository into
   that workspace; migrate the entire compatible dependency set together.
 - Prefer launch/configuration composition over upstream source changes.
@@ -24,11 +24,10 @@ Runtime containers must default to the non-root `spark` user created from `HOST_
 
 ## Scope
 
-Required in v1: Hydra, Hydra-ROS, Khronos, Spark-DSG, and semantic_inference.
-
-Optional/future: DAAAM, DAAAM-ROS, and ROMAN.
-
-Excluded from v1: Hydra-Multi, robot drivers, Spot SDK, Phoenix, planners, Heracles, speech/NLU, and base-station infrastructure.
+The v1 name refers only to the immutable exact-SHA dependency snapshot in
+`dependencies/locks/v1.lock.repos`; it does not identify a graph topology or
+validation mode. Required upstreams are Hydra/Hydra-ROS, Khronos, Spark-DSG,
+and semantic_inference.
 
 ## Testing and outputs
 

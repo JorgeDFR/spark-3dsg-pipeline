@@ -1,0 +1,2 @@
+---
+semantic_label_remap_filepath: $<env ROS_WS>/install/share/hydra/config/label_remaps/uhumans2_office.yaml

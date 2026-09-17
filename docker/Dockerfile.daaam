@@ -1,5 +1,0 @@
-FROM spark-3dsg-gpu:local
-
-# Guardrail: DAAAM uses an independent Hydra/Spark-DSG branch set. A complete
-# image is intentionally deferred until the v2 CODa acceptance workflow exists.
-RUN echo "DAAAM is not a v1 build profile; see docs/DAAAM.md" >&2 && false

@@ -5,8 +5,7 @@ launch:
   - arg: {name: color_topic, default: /input/color/image_raw}
   - arg: {name: depth_topic, default: /input/depth/image_rect}
   - arg: {name: camera_info_topic, default: /input/color/camera_info}
-  - arg: {name: semantic_topic, default: /input/semantic/instances}
-  - arg: {name: labelspace_topic, default: /input/semantic/labelspace}
+  - arg: {name: semantic_topic, default: /input/semantic/image_raw}
   - arg: {name: tf_topic, default: /tf}
   - arg: {name: tf_static_topic, default: /tf_static}
   - executable:
@@ -22,7 +21,6 @@ launch:
         $(var color_topic):=/input/color/image_raw
         $(var depth_topic):=/input/depth/image_rect
         $(var camera_info_topic):=/input/color/camera_info
-        $(var semantic_topic):=/input/semantic/instances
-        $(var labelspace_topic):=/input/semantic/labelspace
+        $(var semantic_topic):=/input/semantic/image_raw
         $(var tf_topic):=/tf
         $(var tf_static_topic):=/tf_static

@@ -4,8 +4,7 @@ topics:
   color: /tesse/left_cam/rgb/image_raw
   depth: /tesse/depth_cam/mono/image_raw
   camera_info: /tesse/left_cam/camera_info
-  instances: /tesse/seg_cam/converted/image_raw
-  labelspace: /input/semantic/labelspace
+  semantic: /tesse/seg_cam/converted/image_raw
   tf: /tf
   tf_static: /tf_static
 frames:
@@ -16,6 +15,11 @@ frames:
 depth_scale: 1.0
 depth_encodings: [16UC1, 32FC1]
 use_sim_time: true
-semantics_source: precomputed
+scene_structure: hierarchical
+semantics:
+  source: recorded
+  labelspace_config: spark_3dsg_pipeline:config/labelspaces/uhumans2_office.yaml
+  pipeline_config: spark_3dsg_pipeline:config/labelspaces/uhumans2_remap.yaml
+visualization: {profile: hierarchical}
 hydra_config: uhumans2.yaml
 playback_rate: 1.0

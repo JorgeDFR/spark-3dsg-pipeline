@@ -10,6 +10,32 @@ ENV SEMANTIC_ENV=/home/spark/.venvs/semantic_inference \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+USER root
+
+# Configure the closed-set frontend only after CUDA and TensorRT are present.
+RUN curl --fail --location --output /tmp/cuda-keyring.deb \
+      https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
+    && dpkg -i /tmp/cuda-keyring.deb \
+    && apt-get update \
+    && version_info="$(apt-cache policy libnvinfer-dev)" \
+    && [[ "$version_info" =~ Candidate:\ [0-9.\-]+\+cuda([0-9]+)\.([0-9]+) ]] \
+    && cuda_nvcc="cuda-nvcc-${BASH_REMATCH[1]}-${BASH_REMATCH[2]}" \
+    && apt-get install -y --no-install-recommends \
+         libnvinfer-dev libnvinfer-plugin-dev libnvonnxparsers-dev "$cuda_nvcc" \
+    && rm -rf /var/lib/apt/lists/* /tmp/cuda-keyring.deb
+
+RUN set +u \
+    && source /opt/ros/jazzy/setup.bash \
+    && source /home/spark/ros_ws/install/setup.bash \
+    && set -u \
+    && cd /home/spark/ros_ws \
+    && colcon build --symlink-install \
+         --packages-select semantic_inference semantic_inference_ros \
+         --cmake-force-configure \
+         --cmake-args -DCMAKE_BUILD_TYPE=Release -DSEMANTIC_INFERENCE_USE_TRT=ON
+
+USER spark
+
 RUN python3 -m venv --system-site-packages ${SEMANTIC_ENV} \
     && ${SEMANTIC_ENV}/bin/pip install --no-cache-dir --upgrade pip \
     && ${SEMANTIC_ENV}/bin/pip install --no-cache-dir \

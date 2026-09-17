@@ -1,7 +1,8 @@
 ---
 launch:
   - arg: {name: use_sim_time, default: 'true', description: Use bag clock}
-  - arg: {name: start_perception, default: 'false', description: Run online YOLOE frontend}
+  - arg: {name: start_closed_set, default: 'false'}
+  - arg: {name: start_open_set, default: 'false'}
   - arg: {name: output_dir, default: /home/spark/output/manual, description: Per-run output directory}
   - arg: {name: map_frame, default: map}
   - arg: {name: odom_frame, default: odom}
@@ -9,11 +10,27 @@ launch:
   - arg: {name: sensor_frame, default: camera_color_optical_frame}
   - arg: {name: exit_after_clock, default: 'true'}
   - arg: {name: hydra_config_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/hydra/adt4.yaml}
-  - arg: {name: perception_config_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/perception/yoloe.yaml}
+  - arg: {name: labelspace_config_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/labelspaces/from_message.yaml}
+  - arg: {name: semantic_pipeline_config_path, default: $(find-pkg-share spark_3dsg_pipeline)/config/labelspaces/no_remap.yaml}
+  - arg: {name: perception_config_path, default: ''}
+  - arg: {name: model_file, default: ''}
+  - arg: {name: model_config_path, default: ''}
+  - arg: {name: grouping_config_path, default: ''}
+  - arg: {name: labelspace_name, default: ''}
 
   - include:
-      if: $(var start_perception)
-      file: $(find-pkg-share spark_3dsg_pipeline)/launch/perception.launch.yaml
+      if: $(var start_closed_set)
+      file: $(find-pkg-share spark_3dsg_pipeline)/launch/perception_closed_set.launch.yaml
+      arg:
+        - {name: use_sim_time, value: $(var use_sim_time)}
+        - {name: model_file, value: $(var model_file)}
+        - {name: model_config_path, value: $(var model_config_path)}
+        - {name: grouping_config_path, value: $(var grouping_config_path)}
+        - {name: labelspace_name, value: $(var labelspace_name)}
+
+  - include:
+      if: $(var start_open_set)
+      file: $(find-pkg-share spark_3dsg_pipeline)/launch/perception_open_set.launch.yaml
       arg:
         - {name: use_sim_time, value: $(var use_sim_time)}
         - {name: perception_config_path, value: $(var perception_config_path)}
@@ -29,10 +46,12 @@ launch:
         - {from: ~/input/camera/rgb/image_raw, to: /input/color/image_raw}
         - {from: ~/input/camera/rgb/camera_info, to: /input/color/camera_info}
         - {from: ~/input/camera/depth_registered/image_rect, to: /input/depth/image_rect}
-        - {from: ~/input/camera/semantic/image_raw, to: /input/semantic/instances}
+        - {from: ~/input/camera/semantic/image_raw, to: /input/semantic/image_raw}
         - {from: ~/labelspace, to: /input/semantic/labelspace}
       args: >
         --config-utilities-file $(var hydra_config_path)
+        --config-utilities-file $(var labelspace_config_path)@labelspace
+        --config-utilities-file $(var semantic_pipeline_config_path)
         --config-utilities-yaml {exit_after_clock: $(var exit_after_clock), log_path: $(var output_dir), output: {use_timestamp: false, overwrite: true}}
         --config-utilities-yaml {robot_id: 0, map_frame: $(var map_frame), odom_frame: $(var odom_frame), robot_frame: $(var robot_frame)}
         --config-utilities-yaml {input: {inputs: {camera: {sensor: {extrinsics: {type: ros, sensor_frame: $(var sensor_frame)}}}}}}

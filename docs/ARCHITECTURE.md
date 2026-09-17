@@ -1,57 +1,53 @@
 # Architecture
 
-This repository is an integration layer, not a mapper fork.
+The integration resolves three orthogonal choices before ROS starts:
 
 ```text
-bag/dataset adapter
-  -> /input/color/image_raw
-  -> /input/depth/image_rect
-  -> /input/color/camera_info
-  -> /tf + /tf_static
-            |
-            +-> online YOLOE instances
-            |       -> Khronos ActiveWindow
-            |       -> OBJECTS + MESH_PLACES
-            |
-            +-> recorded ground-truth semantics
-                    -> Hydra ReconstructionModule
-                    -> OBJECTS + MESH_PLACES
-                    -> PLACES + ROOMS + BUILDINGS
-                                      |
-                                      v
-                              Hydra backend + Spark-DSG
-                                      |
-                  mesh-free dsg.json + mesh + metadata
+dataset adapter
+  +-- scene_structure: hierarchical | khronos
+  +-- semantics.source: recorded | closed_set | open_set
+  +-- visualization.profile: hierarchical | khronos
 ```
 
-Owned here: Docker, exact locks, launch composition, complete mapper profiles,
-dataset topic/frame adapters, preflight checks, deterministic output,
-inspection, tests, and documentation.
+Invalid combinations fail in `scripts/dataset_config.py`. Visualization is
+selected from explicit adapter metadata, never from a Hydra YAML filename.
 
-Owned upstream: SLAM/TSDF, object detection/tracking algorithms, graph construction, optimization, the DSG data structure, YOLOE implementation, and DAAAM.
+## Scene structures
 
-The integration package is the canonical ROS execution layer. The runtime
-wrappers resolve dataset YAML and manage readiness, logs, shutdown, and output;
-they delegate ROS processes to these launch files:
+The `classic` and uHumans2 pipelines use core Hydra reconstruction:
 
-- `pipeline.launch.yaml`: selected Hydra profile and optional perception composition.
-- `perception.launch.yaml`: semantic-inference/YOLOE composition.
-- `bag.launch.yaml`: rosbag2 playback, QoS, and normalized topic remapping.
-- `visualization.launch.yaml`: upstream Hydra streaming visualizer and RViz.
+```text
+BUILDINGS
+   |
+ ROOMS        MESH_PLACES (decoupled surface places)
+   |
+ PLACES
+   |
+OBJECTS
+```
 
-This separation keeps dataset policy in the repository wrappers without
-duplicating ROS node definitions outside the package.
+They use semantic TSDF reconstruction, mesh object extraction, GVD places,
+room/building functors, and a separate 2D surface-place updater.
 
-The repository-owned ROS package lives directly under `src/spark_3dsg_pipeline`. Docker retains an internal `/home/spark/ros_ws` only because the pinned upstream ROS packages must be imported and built somewhere. Compose mounts the local integration package into that internal workspace, whose symlink install keeps launch and configuration edits live without rebuilding the image.
+The ADT4 example uses the pinned Khronos active window and contains `OBJECTS`
+plus `MESH_PLACES`. Its connector makes mesh places parents of objects.
 
-The runnable v1 default follows the public ADT4 mapping snapshot through
-`config/hydra/adt4.yaml`. `classic.yaml` starts from ADT4's classic mapping
-profile and adds the core Hydra GVD place and room hierarchy. The independent
-`uhumans2.yaml` office demo uses core Hydra reconstruction and ground-truth
-semantics instead of Khronos. Dataset adapters select one complete profile;
-profiles are not merged across active-window implementations. The
-locked Hydra revision is a public monorepo containing Hydra-ROS, so importing the
-separate post-split repository would duplicate ROS packages. No source patch is
-applied.
+## Semantic paths
 
-DAAAM is isolated by a separate manifest/lock because it requires project-specific Hydra and Spark-DSG branches. It must never be merged into the standard source workspace.
+- `recorded`: the bag class-ID image is normalized to
+  `/input/semantic/image_raw`; no perception node runs.
+- `closed_set`: the upstream C++ closed-set node consumes RGB and publishes a
+  class-ID image. Model config, ONNX model, semantic grouping, and matching
+  Hydra label space are separate resources.
+- `open_set`: the upstream Python YOLOE instance node publishes packed instance
+  IDs and a latched labelspace. Model/worker settings and prompt labels are
+  composed from separate YAML files.
+
+The repository does not implement reconstruction, tracking, or DSG algorithms.
+It does not modify upstream source.
+
+## Reproducibility
+
+`dependencies/locks/v1.lock.repos` is the machine-consumed exact-SHA snapshot.
+`dependencies/upstream-public.repos` is the updateable maintainer manifest.
+The name `v1` has no topology or validation meaning.

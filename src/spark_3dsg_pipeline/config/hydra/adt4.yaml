@@ -6,7 +6,6 @@ robot_id: 0
 config_verbosity: 1
 enable_zmq_interface: false
 map_window: {type: spatial, max_radius_m: 14.0}
-labelspace: {type: from_msg}
 input:
   type: RosInput
   max_receiver_queue_size: 1

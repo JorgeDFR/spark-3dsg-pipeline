@@ -1,0 +1,25 @@
+---
+# Follows the pinned semantic_inference_ros closed-set launch pattern while
+# accepting every model/taxonomy component explicitly.
+launch:
+  - arg: {name: use_sim_time, default: 'true'}
+  - arg: {name: model_file, description: Absolute ONNX model path}
+  - arg: {name: model_config_path, description: semantic_inference model config}
+  - arg: {name: grouping_config_path, description: semantic-inference label grouping}
+  - arg: {name: labelspace_name, description: Human-readable grouping name}
+  - set_remap: {from: color/image_raw, to: /input/color/image_raw}
+  - set_remap: {from: semantic/image_raw, to: /input/semantic/image_raw}
+  - set_remap: {from: semantic_overlay/image_raw, to: /input/semantic/overlay}
+  - node:
+      pkg: semantic_inference_ros
+      exec: closed_set_node
+      name: semantic_inference_closed_set
+      on_exit: shutdown
+      param:
+        - {name: use_sim_time, value: $(var use_sim_time)}
+      args: >
+        --config-utilities-file $(var model_config_path)
+        --config-utilities-file $(var grouping_config_path)@output/recolor
+        --config-utilities-yaml {segmenter: {model: {model_file: $(var model_file)}}}
+        --config-utilities-yaml {output: {recolor: {colormap_path: $(find-pkg-share semantic_inference_ros)/config/distinct_150_colors.csv}}}
+        --config-utilities-yaml {worker: {max_queue_size: 1, image_separation_s: 0.1}}

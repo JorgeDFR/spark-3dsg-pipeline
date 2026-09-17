@@ -7,7 +7,7 @@ from inspect_dsg import acceptance_errors, summarize
 
 
 @pytest.mark.integration
-def test_external_spot_output_meets_v1_contract():
+def test_external_spot_output_meets_pipeline_contract():
     value = os.environ.get("SPOT_DSG")
     if not value:
         pytest.skip("set SPOT_DSG for the manual/self-hosted GPU integration test")

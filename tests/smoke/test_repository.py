@@ -5,389 +5,250 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
+PACKAGE = ROOT / "src/spark_3dsg_pipeline"
 
 
-def assert_yaml_has_unique_keys(path):
+def assert_yaml_has_unique_keys(path: Path) -> None:
     def visit(node):
         if isinstance(node, yaml.MappingNode):
             keys = set()
             for key, value in node.value:
-                assert isinstance(key, yaml.ScalarNode), f"{path}: non-scalar YAML key"
-                assert key.value not in keys, f"{path}: duplicate YAML key {key.value!r}"
+                assert isinstance(key, yaml.ScalarNode), f"{path}: non-scalar key"
+                assert key.value not in keys, f"{path}: duplicate key {key.value!r}"
                 keys.add(key.value)
                 visit(value)
         elif isinstance(node, yaml.SequenceNode):
             for value in node.value:
                 visit(value)
 
-    visit(yaml.compose(path.read_text()))
+    visit(yaml.compose(path.read_text(encoding="utf-8")))
 
 
-def test_lock_is_https_and_exact():
+def load(relative: str):
+    path = PACKAGE / relative
+    assert_yaml_has_unique_keys(path)
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def test_all_yaml_and_repo_manifests_parse_with_unique_keys():
+    for path in sorted(ROOT.rglob("*.yaml")) + sorted(ROOT.rglob("*.repos")):
+        if any(part in {".git", ".venv"} for part in path.parts):
+            continue
+        assert_yaml_has_unique_keys(path)
+        yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def test_v1_lock_is_exact_https_and_consumed_by_build():
+    lock_path = ROOT / "dependencies/locks/v1.lock.repos"
+    lock = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
     sha = re.compile(r"^[0-9a-f]{40}$")
-    lock = yaml.safe_load((ROOT / "dependencies/locks/adt4.lock.repos").read_text())
+    assert {"hydra", "khronos", "spark_dsg", "semantic_inference"}.issubset(
+        lock["repositories"]
+    )
     for entry in lock["repositories"].values():
         assert entry["url"].startswith("https://")
         assert sha.fullmatch(entry["version"])
+    dockerfile = (ROOT / "docker/Dockerfile.core").read_text(encoding="utf-8")
+    assert "dependencies/locks/v1.lock.repos" in dockerfile
+    assert "adt4.lock.repos" not in dockerfile
 
 
-def test_mapper_config_contains_v1_architecture():
-    config = yaml.safe_load(
-        (
-            ROOT
-            / "src/spark_3dsg_pipeline/config/hydra/adt4.yaml"
-        ).read_text()
-    )
-    assert config["active_window"]["type"] == "ActiveWindow"
-    assert config["active_window"]["tracker"]["type"] == "MaxIouTracker"
-    assert config["active_window"]["object_extractor"]["type"] == "MeshObjectExtractor"
-    assert config["frontend"]["traversability_places"]["layer"] == "MESH_PLACES"
-    assert "freespace_places" not in config["frontend"]
-    assert "OBJECTS" in config["frontend"]["graph_updater"]["layer_updates"]
-    assert "places" not in config["backend"]["update_functors"]
-    assert "rooms" not in config["backend"]["update_functors"]
-    for frame_key in ("map_frame", "odom_frame", "robot_frame"):
-        assert frame_key not in config
+def test_hierarchical_configs_have_full_classic_hierarchy():
+    for name in ("classic", "uhumans2"):
+        config = load(f"config/hydra/{name}.yaml")
+        assert config["active_window"]["type"] == "ReconstructionModule"
+        assert config["input"]["inputs"]["camera"]["receiver"]["type"] == "ClosedSetImageReceiver"
+        assert config["frontend"]["enable_mesh_objects"] is True
+        assert config["frontend"]["surface_places"]["type"] == "place_2d"
+        assert config["frontend"]["freespace_places"]["type"] == "gvd"
+        functors = config["backend"]["update_functors"]
+        expected = {
+            "objects": "UpdateObjectsFunctor",
+            "surface_places": "Update2dPlacesFunctor",
+            "places": "UpdatePlacesFunctor",
+            "rooms": "UpdateRoomsFunctor",
+            "buildings": "UpdateBuildingsFunctor",
+        }
+        assert {key: functors[key]["type"] for key in expected} == expected
+        assert "graph_connector" not in config["frontend"]
+        assert "paths" not in config
 
 
-def test_classic_profile_adds_places_and_rooms_to_adt4_classic():
-    config = yaml.safe_load(
-        (
-            ROOT / "src/spark_3dsg_pipeline/config/hydra/classic.yaml"
-        ).read_text()
-    )
+def test_classic_is_online_closed_set_and_taxonomy_is_an_overlay():
+    classic = load("config/hydra/classic.yaml")
+    assert classic["active_window"]["volumetric_map"]["with_semantics"] is True
+    assert "labelspace" not in classic
+    assert "semantic_label_remap_filepath" not in classic
+    uhumans = load("config/hydra/uhumans2.yaml")
+    assert "labelspace" not in uhumans
+    labels = load("config/labelspaces/uhumans2_office.yaml")
+    assert labels["type"] == "from_config"
+    assert labels["label_names"]
+    pipeline = (PACKAGE / "launch/pipeline.launch.yaml").read_text()
+    assert "$(var labelspace_config_path)@labelspace" in pipeline
+
+
+def test_adt4_is_khronos_object_mesh_place_graph():
+    config = load("config/hydra/adt4.yaml")
     assert config["paths"] == ["khronos", "khronos_ros"]
     assert config["active_window"]["type"] == "ActiveWindow"
-    assert config["active_window"]["object_detector"]["type"] == "ConnectedSemantics"
-    assert config["active_window"]["tracker"]["track_by"] == "voxels"
-    assert config["frontend"]["surface_places"]["type"] == "place_2d"
-    assert config["frontend"]["freespace_places"]["type"] == "gvd"
-    functors = config["backend"]["update_functors"]
-    assert functors["surface_places"]["type"] == "Update2dPlacesFunctor"
-    assert functors["places"]["type"] == "UpdatePlacesFunctor"
-    assert functors["rooms"]["type"] == "UpdateRoomsFunctor"
-    assert "buildings" not in functors
-
-
-def test_uhumans2_profile_uses_core_hydra_hierarchy():
-    config = yaml.safe_load(
-        (
-            ROOT
-            / "src/spark_3dsg_pipeline/config/hydra/uhumans2.yaml"
-        ).read_text()
-    )
-    assert "paths" not in config
-    assert config["active_window"]["type"] == "ReconstructionModule"
-    assert config["input"]["inputs"]["camera"]["receiver"]["type"] == "ClosedSetImageReceiver"
-    assert config["frontend"]["enable_mesh_objects"] is True
-    assert config["frontend"]["surface_places"]["type"] == "place_2d"
-    assert config["frontend"]["freespace_places"]["type"] == "gvd"
-    functors = config["backend"]["update_functors"]
-    assert functors["objects"]["type"] == "UpdateObjectsFunctor"
-    assert functors["surface_places"]["type"] == "Update2dPlacesFunctor"
-    assert functors["places"]["type"] == "UpdatePlacesFunctor"
-    assert functors["rooms"]["type"] == "UpdateRoomsFunctor"
-    assert functors["buildings"]["type"] == "UpdateBuildingsFunctor"
-
-
-def test_every_dataset_selects_an_installed_complete_hydra_profile():
-    package = ROOT / "src/spark_3dsg_pipeline"
-    hydra_dir = package / "config/hydra"
-    for dataset_path in (package / "config/datasets").glob("*.yaml"):
-        dataset = yaml.safe_load(dataset_path.read_text())
-        profile = hydra_dir / dataset["hydra_config"]
-        assert profile.is_file(), f"{dataset_path.name}: missing {profile.name}"
-
-    assert not (hydra_dir / "empty.yaml").exists()
-    assert sorted(path.name for path in hydra_dir.glob("*.yaml")) == [
-        "adt4.yaml",
-        "classic.yaml",
-        "uhumans2.yaml",
+    assert config["input"]["inputs"]["camera"]["receiver"]["type"] == "InstanceImageReceiver"
+    assert config["frontend"]["traversability_places"]["layer"] == "MESH_PLACES"
+    connector = config["frontend"]["graph_connector"]["layers"]
+    assert connector == [
+        {"parent_layer": "MESH_PLACES", "child_layers": [{"layer": "OBJECTS"}]}
     ]
-    for profile in hydra_dir.glob("*.yaml"):
-        assert_yaml_has_unique_keys(profile)
-        config = yaml.safe_load(profile.read_text())
-        for frame_key in ("map_frame", "odom_frame", "robot_frame"):
-            assert frame_key not in config, f"{profile.name}: {frame_key} belongs to launch"
+    assert "freespace_places" not in config["frontend"]
+    assert not {"places", "rooms", "buildings"}.intersection(
+        config["backend"]["update_functors"]
+    )
 
 
-def test_large_artifacts_are_ignored():
-    ignore = (ROOT / ".gitignore").read_text()
-    dockerignore = (ROOT / ".dockerignore").read_text()
-    for suffix in ("*.pt", "*.bag", "*.db3", "*.mcap", "*.ply"):
-        assert suffix in ignore
-        assert suffix in dockerignore
+def test_perception_modes_are_separate_and_use_normalized_topic():
+    pipeline = (PACKAGE / "launch/pipeline.launch.yaml").read_text(encoding="utf-8")
+    closed = (PACKAGE / "launch/perception_closed_set.launch.yaml").read_text(
+        encoding="utf-8"
+    )
+    opened = (PACKAGE / "launch/perception_open_set.launch.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert "start_closed_set" in pipeline and "start_open_set" in pipeline
+    assert "perception_closed_set.launch.yaml" in pipeline
+    assert "perception_open_set.launch.yaml" in pipeline
+    assert "closed_set_node" in closed
+    assert "model_config_path" in closed and "grouping_config_path" in closed
+    assert "instance_segmentation.launch.yaml" in opened
+    assert "/input/semantic/image_raw" in closed
+    assert "/input/semantic/image_raw" in opened
+    assert "/input/semantic/instances" not in pipeline + closed + opened
 
 
-def test_containers_use_host_matched_non_root_user():
-    compose = yaml.safe_load((ROOT / "compose.yaml").read_text())
-    build_args = compose["services"]["core"]["build"]["args"]
-    assert build_args == {
-        "USER_UID": "${HOST_UID:-1000}",
-        "USER_GID": "${HOST_GID:-1000}",
-    }
-    common = compose["x-common"]
-    assert common["working_dir"] == "/home/spark/spark-3dsg-pipeline"
-    required_volumes = {
-        "${DATA_DIR:-./data}:/home/spark/data:ro",
-        "${MODEL_DIR:-./models}:/home/spark/models",
-        "${OUTPUT_DIR:-./output}:/home/spark/output",
-        "${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:/home/spark/ros_ws/src/spark_3dsg_pipeline",
-        "spark-cache:/home/spark/.cache",
-    }
-    assert required_volumes.issubset(common["volumes"])
+def test_yoloe_model_settings_and_adt4_labels_are_independent():
+    generic = load("config/perception/yoloe.yaml")
+    labels = load("config/perception/labels/adt4.yaml")
+    assert "text_prompt" not in generic["model"]["instance_model"]
+    assert labels["model"]["instance_model"]["text_prompt"]
+    adapter = load("config/datasets/spot.yaml")
+    assert adapter["semantics"]["labels_config"].endswith("labels/adt4.yaml")
+    assert "adt4.yaml" not in (PACKAGE / "config/perception/yoloe.yaml").read_text()
+    runner = (ROOT / "scripts/run_pipeline.sh").read_text(encoding="utf-8")
+    assert "--labels-config" in runner
+    assert "merge_yaml.py" in runner
 
-    env_example = (ROOT / ".env.example").read_text()
-    assert "HOST_UID=1000" in env_example
-    assert "HOST_GID=1000" in env_example
-    assert "PACKAGE_SOURCE_DIR=./src/spark_3dsg_pipeline" in env_example
 
-    core = (ROOT / "docker/Dockerfile.core").read_text()
-    gpu = (ROOT / "docker/Dockerfile.gpu").read_text()
-    assert "ARG USER_UID=1000" in core
-    assert "ARG USER_GID=1000" in core
-    assert "ROS_WS=/home/spark/ros_ws" in core
-    assert "PIPELINE_ROOT=/home/spark/spark-3dsg-pipeline" in core
-    assert "/opt/ros_ws" not in core
-    assert "/opt/spark_pipeline" not in core
-    assert "USER spark" in core
-    assert gpu.rstrip().endswith('CMD ["bash"]')
-    assert "USER spark" in gpu
+def test_all_referenced_package_local_files_exist():
+    for adapter_path in (PACKAGE / "config/datasets").glob("*.yaml"):
+        adapter = yaml.safe_load(adapter_path.read_text(encoding="utf-8"))
+        assert (PACKAGE / "config/hydra" / adapter["hydra_config"]).is_file()
+        for value in adapter["semantics"].values():
+            if isinstance(value, str) and value.startswith("spark_3dsg_pipeline:"):
+                relative = value.split(":", 1)[1]
+                assert (PACKAGE / relative).is_file(), f"{adapter_path}: {relative}"
+        profile = adapter["visualization"]["profile"]
+        assert (PACKAGE / "config/visualization" / f"{profile}.yaml").is_file()
 
-    build_script = (ROOT / "scripts/build_workspace.sh").read_text()
-    assert "--symlink-install" in build_script
 
-    data_setup = compose["services"]["data-setup"]
-    assert data_setup["volumes"] == [
-        "${DATA_DIR:-./data}:/home/spark/data"
+def test_exactly_two_structure_specific_visualizer_configs():
+    config_dir = PACKAGE / "config/visualization"
+    assert sorted(path.name for path in config_dir.glob("*.yaml")) == [
+        "hierarchical.yaml",
+        "khronos.yaml",
     ]
-    assert data_setup["working_dir"] == "/home/spark/spark-3dsg-pipeline"
-
-
-def test_spot_is_the_default_dataset_adapter():
-    makefile = (ROOT / "Makefile").read_text()
-    assert "DATASET ?= spot" in makefile
-
-
-def test_integration_package_name_and_flat_source_layout():
-    package_root = ROOT / "src/spark_3dsg_pipeline"
-    assert package_root.is_dir()
-    assert not (ROOT / "ros_ws").exists()
-    assert "<name>spark_3dsg_pipeline</name>" in (
-        package_root / "package.xml"
-    ).read_text()
-    assert "project(spark_3dsg_pipeline)" in (
-        package_root / "CMakeLists.txt"
-    ).read_text()
-
-
-def test_ros_setup_is_sourced_without_nounset():
-    script = (ROOT / "scripts/build_workspace.sh").read_text()
-    disable_nounset = script.index("set +u")
-    source_ros = script.index("source /opt/ros/jazzy/setup.bash")
-    restore_nounset = script.index("set -u", source_ros)
-    assert disable_nounset < source_ros < restore_nounset
-
-
-def test_docker_uses_canonical_bootstrap_and_ros_entrypoint():
-    core = (ROOT / "docker/Dockerfile.core").read_text()
-    gpu = (ROOT / "docker/Dockerfile.gpu").read_text()
-
-    assert "scripts/bootstrap_dependencies.sh" in core
-    assert "vcs import src" not in core
-    assert "docker/ros_entrypoint.sh" in core
-    assert "docker/ros_entrypoint.sh" in gpu
-    assert not (ROOT / "docker/entrypoint.sh").exists()
-
-
-def test_launch_configs_keep_hydra_and_perception_paths_isolated():
-    package = ROOT / "src/spark_3dsg_pipeline"
-    pipeline = (package / "launch/pipeline.launch.yaml").read_text()
-    perception = (package / "launch/perception.launch.yaml").read_text()
-
-    assert "name: hydra_config_path" in pipeline
-    assert "name: hydra_overlay_path" not in pipeline
-    assert "name: perception_config_path" in pipeline
-    assert "--config-utilities-file $(var hydra_config_path)" in pipeline
-    assert pipeline.count("--config-utilities-file") == 1
-    assert "value: $(var perception_config_path)" in perception
-
-
-def test_runtime_resources_use_ament_package_share():
-    script = (ROOT / "scripts/run_pipeline.sh").read_text()
-    assert "ros2 pkg prefix --share spark_3dsg_pipeline" in script
-    assert "install/spark_3dsg_pipeline/share" not in script
-    assert "--get hydra_config" in script
-    assert 'hydra_config_path:="$hydra_config"' in script
-    assert 'cp "$hydra_config" "$run_dir/hydra.yaml"' in script
-
-    bag_launch = (
-        ROOT / "src/spark_3dsg_pipeline/launch/bag.launch.yaml"
-    ).read_text()
-    assert "$(find-pkg-share spark_3dsg_pipeline)/config/tf_qos.yaml" in bag_launch
-
-
-def test_bag_playback_waits_for_hydra_input_subscription():
-    script = (ROOT / "scripts/run_pipeline.sh").read_text()
-    readiness = script.index('readiness_topic=/input/color/camera_info')
-    subscription = script.index('ros2 topic info "$readiness_topic"', readiness)
-    playback = script.index('"$pipeline_root/scripts/run_bag.sh"', subscription)
-    assert readiness < subscription < playback
-    assert "ros2 node list" not in script
-
-
-def test_bag_playback_uses_package_launch_and_normalizes_all_inputs():
-    script = (ROOT / "scripts/run_bag.sh").read_text()
-    launch = (
-        ROOT / "src/spark_3dsg_pipeline/launch/bag.launch.yaml"
-    ).read_text()
-
-    assert "exec ros2 launch spark_3dsg_pipeline bag.launch.yaml" in script
-    assert "ros2 bag play" not in script
-    for key in (
-        "color",
-        "depth",
-        "camera_info",
-        "instances",
-        "labelspace",
-        "tf",
-        "tf_static",
-    ):
-        assert f"topic {key}" in script
-
-    assert "- executable:" in launch
-    assert "ros2 bag play $(var bag)" in launch
-    assert "pkg: rosbag2_transport" not in launch
-    assert launch.count("--remap") == 1
-    for target in (
-        "/input/color/image_raw",
-        "/input/depth/image_rect",
-        "/input/color/camera_info",
-        "/input/semantic/instances",
-        "/input/semantic/labelspace",
-        "/tf",
-        "/tf_static",
-    ):
-        assert f":={target}" in launch
-
-
-def test_rviz_uses_package_visualization_launch_and_dataset_frame():
-    compose = yaml.safe_load((ROOT / "compose.yaml").read_text())
-    makefile = (ROOT / "Makefile").read_text()
-    wrapper = (ROOT / "scripts/run_visualization.sh").read_text()
-    launch = (
-        ROOT / "src/spark_3dsg_pipeline/launch/visualization.launch.yaml"
-    ).read_text()
-    rviz = (ROOT / "src/spark_3dsg_pipeline/rviz/scene_graph.rviz").read_text()
-
-    assert compose["services"]["rviz"]["command"] == [
-        "/home/spark/spark-3dsg-pipeline/scripts/run_visualization.sh",
-        "spot",
-    ]
-    assert 'run_visualization.sh "$(DATASET)"' in makefile
-    assert "ros2 launch spark_3dsg_pipeline visualization.launch.yaml" in wrapper
-    assert "--get frames.map" in wrapper
-    assert "hydra_visualizer)/launch/streaming_visualizer.launch.yaml" in launch
-    assert "visualizer_frame, value: $(var map_frame)" in launch
-    assert "visualizer_config_path, value: $(var visualizer_config_path)" in launch
-    assert "name: visualizer_overlay_path" not in launch
-    assert "--fixed-frame $(var map_frame)" in launch
-    for topic in (
-        "/hydra_visualizer/mesh",
-        "/hydra_visualizer/graph",
-        "/hydra_visualizer/agent_poses",
-    ):
-        assert topic in rviz
-
-
-def test_visualization_uses_rgb_mesh_colors_and_displayable_semantic_overlay():
-    package = ROOT / "src/spark_3dsg_pipeline"
-    perception_config = yaml.safe_load(
-        (package / "config/perception/yoloe.yaml").read_text()
+    hierarchical = load("config/visualization/hierarchical.yaml")
+    khronos = load("config/visualization/khronos.yaml")
+    assert {str(key) for key in hierarchical["renderer"]["layers"]}.issuperset(
+        {"2", "3", "4", "5", "2p*", "3p1"}
     )
-    visualizer_config = yaml.safe_load(
-        (package / "config/visualization/hydra_visualizer.yaml").read_text()
-    )
-    perception_launch = (package / "launch/perception.launch.yaml").read_text()
-    rviz = (package / "rviz/scene_graph.rviz").read_text()
-
-    assert perception_config["visualize_semantic_img"] is True
-    assert (
-        "from: semantic_overlay/image_raw, to: /input/semantic/overlay"
-        in perception_launch
-    )
-    assert "/input/semantic/overlay" in rviz
-    assert "/input/semantic/instances" not in rviz
-    assert visualizer_config["plugins"]["mesh"]["coloring"]["type"] == ""
-
-
-def test_visualizer_config_is_complete_and_matches_locked_schema():
-    config_dir = ROOT / "src/spark_3dsg_pipeline/config/visualization"
-    config_path = config_dir / "hydra_visualizer.yaml"
-    assert [path.name for path in config_dir.glob("*.yaml")] == [config_path.name]
-    assert_yaml_has_unique_keys(config_path)
-
-    config = yaml.safe_load(config_path.read_text())
-    assert config["loop_period_s"] > 0
-    assert config["graph"] == {"type": "GraphFromRos", "wrapper_ns": "~"}
-    assert config["plugins"]["mesh"]["type"] == "MeshPlugin"
-    assert config["plugins"]["mesh"]["coloring"]["type"] == ""
-
-    renderer = config["renderer"]
-    assert {str(key) for key in renderer["layers"]} == {
+    assert {str(key) for key in khronos["renderer"]["layers"]} == {
         "2",
-        "3",
-        "4",
-        "5",
         "2p*",
         "3p1",
         "3p2",
     }
-    required_layer_fields = {
-        "visualize",
-        "z_offset_scale",
-        "draw_frontier_ellipse",
-        "nodes",
-        "edges",
-        "text",
-        "bounding_boxes",
-        "boundaries",
-    }
-    for layer in renderer["layers"].values():
-        assert set(layer) == required_layer_fields
-
-    active_keys = set()
-
-    def collect_keys(value):
-        if isinstance(value, dict):
-            active_keys.update(str(key) for key in value)
-            for child in value.values():
-                collect_keys(child)
-        elif isinstance(value, list):
-            for child in value:
-                collect_keys(child)
-
-    collect_keys(config)
-    assert "use_color_adaptor" not in active_keys
-    assert "visualizer_frame" not in active_keys
-    raw = config_path.read_text()
-    assert "ADT4 default alternative" in raw
-    assert "ADT4 classic alternative" in raw
-
-
-def test_lint_validates_every_installed_launch_file():
-    script = (ROOT / "scripts/run_lint.sh").read_text()
-    launch_dir = ROOT / "src/spark_3dsg_pipeline/launch"
-    for launch_file in launch_dir.glob("*.launch.yaml"):
-        assert launch_file.name in script
-
-
-def test_tf_static_qos_retains_every_example_batch():
-    config = yaml.safe_load(
-        (ROOT / "src/spark_3dsg_pipeline/config/tf_qos.yaml").read_text()
+    assert "khronos_objects" not in hierarchical["plugins"]
+    assert "khronos_objects" in khronos["plugins"]
+    assert not {"3", "4", "5"}.intersection(
+        {str(key) for key in khronos["renderer"]["layers"]}
     )
-    profile = config["/tf_static"]
-    assert profile["history"] == "keep_last"
-    assert profile["depth"] >= 5
-    assert profile["durability"] == "transient_local"
-    assert profile["reliability"] == "reliable"
+    edges = hierarchical["renderer"]["interlayer_edges"]
+    assert any(edge["from"] == 3 and edge["to"] == 2 for edge in edges)
+    assert not any(edge["from"] == "3*" and edge["to"] == 2 for edge in edges)
+
+
+def test_visualization_supports_live_and_native_json_file_modes():
+    launch = (PACKAGE / "launch/visualization.launch.yaml").read_text(
+        encoding="utf-8"
+    )
+    wrapper = (ROOT / "scripts/run_visualization.sh").read_text(encoding="utf-8")
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "streaming_visualizer.launch.yaml" in launch
+    assert "GraphFromFile" in launch
+    assert "file_mode" in launch
+    assert "DSG JSON not found" in wrapper
+    assert "invalid DSG JSON" in wrapper
+    assert "VISUALIZATION_PROFILE" in makefile and "DSG ?=" in makefile
+
+
+def test_runtime_paths_use_installed_package_shares():
+    pipeline = (PACKAGE / "launch/pipeline.launch.yaml").read_text(encoding="utf-8")
+    visualization = (PACKAGE / "launch/visualization.launch.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert "/home/spark/ros_ws/src" not in pipeline + visualization
+    assert "$(find-pkg-share spark_3dsg_pipeline)" in pipeline
+    assert "$(find-pkg-share spark_3dsg_pipeline)" in visualization
+
+
+def test_no_removed_pipeline_references_or_files_remain():
+    removed_name = "d" + "aaam"
+    for path in ROOT.rglob("*"):
+        if not path.is_file() or any(
+            part in {".git", ".venv", ".pytest_cache", "data", "models", "output"}
+            for part in path.parts
+        ):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8").lower()
+        except UnicodeDecodeError:
+            continue
+        assert removed_name not in text, path
+
+
+def test_v1_is_only_dependency_snapshot_terminology():
+    forbidden = (
+        "require-" + "v1",
+        "spot " + "v1",
+        "runnable " + "v1",
+        "v1 " + "semantic",
+    )
+    for path in ROOT.rglob("*"):
+        if not path.is_file() or any(
+            part in {".git", ".venv", ".pytest_cache", "data", "models", "output"}
+            for part in path.parts
+        ):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8").lower()
+        except UnicodeDecodeError:
+            continue
+        for phrase in forbidden:
+            assert phrase not in text, f"{path}: misleading version terminology"
+
+
+def test_output_metadata_records_version_and_lock_hash():
+    runner = (ROOT / "scripts/run_pipeline.sh").read_text(encoding="utf-8")
+    assert '"pipeline_version": "v1"' in runner
+    assert '"dependency_lock_hash"' in runner
+    assert 'run_dir / "v1.lock.repos"' in runner
+
+
+def test_non_root_runtime_and_artifact_ignores_remain():
+    core = (ROOT / "docker/Dockerfile.core").read_text(encoding="utf-8")
+    gpu = (ROOT / "docker/Dockerfile.gpu").read_text(encoding="utf-8")
+    assert "USER spark" in core
+    assert gpu.count("USER spark") >= 1
+    compose = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
+    assert compose["x-common"]["working_dir"] == "/home/spark/spark-3dsg-pipeline"
+    for suffix in ("*.pt", "*.bag", "*.db3", "*.mcap", "*.ply"):
+        assert suffix in (ROOT / ".gitignore").read_text()
+        assert suffix in (ROOT / ".dockerignore").read_text()

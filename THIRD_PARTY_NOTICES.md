@@ -1,6 +1,6 @@
 # Third-party notices
 
-This integration fetches source at image-build time; it does not vendor upstream code or redistribute model weights. The authoritative license is always the `LICENSE` file at the exact revision in `dependencies/locks/adt4.lock.repos`.
+This integration fetches source at image-build time; it does not vendor upstream code or redistribute model weights. The authoritative license is always the `LICENSE` file at the exact revision in `dependencies/locks/v1.lock.repos`.
 
 | Project | Purpose | Upstream license (repository metadata/file) |
 | --- | --- | --- |

@@ -10,15 +10,16 @@ INSPECT_ARGS ?=
 PREPARE_ARGS ?=
 RUN_ARGS ?=
 HYDRA_CONFIG ?=
+LABELS_CONFIG ?=
+DSG ?=
+VISUALIZATION_PROFILE ?=
 
 ifeq ($(PROFILE),core)
 SERVICE := core
 else ifeq ($(PROFILE),gpu)
 SERVICE := pipeline
-else ifeq ($(PROFILE),daaam)
-SERVICE := daaam
 else
-$(error PROFILE must be core, gpu, or daaam)
+$(error PROFILE must be core or gpu)
 endif
 
 .PHONY: help build models prepare-data shell validate-bag run inspect rviz test lint clean config lock-dependencies
@@ -29,24 +30,16 @@ help: ## Show this help
 config: ## Validate the resolved Compose configuration
 	@$(COMPOSE) config --quiet
 
-build: ## Build PROFILE=core|gpu (DAAAM is a post-v1 placeholder)
+build: ## Build the exact-SHA v1 snapshot with PROFILE=core|gpu
 ifeq ($(PROFILE),core)
 	@$(COMPOSE) --profile core build core
 else ifeq ($(PROFILE),gpu)
 	@$(COMPOSE) --profile core build core
 	@$(COMPOSE) --profile gpu build pipeline
-else
-	@echo "DAAAM is intentionally outside the v1 lock; see docs/DAAAM.md" >&2
-	@exit 2
 endif
 
-models: ## Download and checksum external model weights into the mounted model directory
-ifeq ($(PROFILE),daaam)
-	@echo "DAAAM model management is not implemented in v1; see docs/DAAAM.md" >&2
-	@exit 2
-else
+models: ## Download/checksum closed-set and YOLOE weights into the model mount
 	@$(COMPOSE) --profile $(PROFILE) run --rm $(SERVICE) $(PIPELINE_ROOT)/scripts/download_models.sh $(PROFILE)
-endif
 
 prepare-data: ## Detect/extract/convert known Spot and uHumans2 example bags
 	@$(COMPOSE) --profile tools run --rm --build data-setup \
@@ -59,17 +52,20 @@ validate-bag: ## Validate BAG against DATASET before mapping
 	@test -n "$(BAG)" || { echo "BAG is required (container path, normally $(CONTAINER_HOME)/data/...)" >&2; exit 2; }
 	@$(COMPOSE) --profile $(PROFILE) run --rm $(SERVICE) $(PIPELINE_ROOT)/scripts/validate_bag.py --bag "$(BAG)" --dataset "$(DATASET)"
 
-run: ## Run a headless bag pipeline; requires BAG=...; optional HYDRA_CONFIG=classic.yaml
+run: ## Run a headless bag pipeline; optional compatible HYDRA_CONFIG/LABELS_CONFIG
 	@test -n "$(BAG)" || { echo "BAG is required (container path, normally $(CONTAINER_HOME)/data/...)" >&2; exit 2; }
-	@$(COMPOSE) --profile $(PROFILE) run --rm $(SERVICE) $(PIPELINE_ROOT)/scripts/run_pipeline.sh --dataset "$(DATASET)" --bag "$(BAG)" $(if $(HYDRA_CONFIG),--hydra-config "$(HYDRA_CONFIG)",) $(RUN_ARGS)
+	@$(COMPOSE) --profile $(PROFILE) run --rm $(SERVICE) $(PIPELINE_ROOT)/scripts/run_pipeline.sh --dataset "$(DATASET)" --bag "$(BAG)" $(if $(HYDRA_CONFIG),--hydra-config "$(HYDRA_CONFIG)",) $(if $(LABELS_CONFIG),--labels-config "$(LABELS_CONFIG)",) $(RUN_ARGS)
 
 inspect: ## Inspect DSG=/home/spark/output/.../dsg.json
 	@test -n "$(DSG)" || { echo "DSG is required (container path, normally $(CONTAINER_HOME)/output/...)" >&2; exit 2; }
 	@$(COMPOSE) --profile core run --rm core python3 $(PIPELINE_ROOT)/scripts/inspect_dsg.py "$(DSG)" $(INSPECT_ARGS)
 
-rviz: ## Start optional RViz with the scene-graph configuration
+rviz: ## Visualize live or DSG=...; optionally set VISUALIZATION_PROFILE=...
 	@$(COMPOSE) --profile rviz run --rm rviz \
-		$(PIPELINE_ROOT)/scripts/run_visualization.sh "$(DATASET)"
+		$(PIPELINE_ROOT)/scripts/run_visualization.sh \
+		$(if $(VISUALIZATION_PROFILE),,--dataset "$(DATASET)") \
+		$(if $(VISUALIZATION_PROFILE),--profile "$(VISUALIZATION_PROFILE)",) \
+		$(if $(DSG),--dsg "$(DSG)",)
 
 test: ## Run repository tests inside the core image
 	@$(COMPOSE) --profile core run --rm core $(PIPELINE_ROOT)/scripts/run_tests.sh

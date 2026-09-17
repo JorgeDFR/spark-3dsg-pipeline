@@ -17,6 +17,17 @@ fi
   exit 1
 }
 
+# Normalize the selected backend graph and keep mesh data in mesh.ply. This
+# makes the public dsg.json small and consistently loadable by Spark-DSG.
+python3 - "$source_dsg" "$run_dir/dsg.json" <<'PY'
+import sys
+import spark_dsg
+
+graph = spark_dsg.DynamicSceneGraph.load(sys.argv[1])
+graph.save(sys.argv[2], include_mesh=False)
+PY
+echo "Mesh-free backend DSG saved: $run_dir/dsg.json"
+
 source_mesh_dsg=$(
   find "$(dirname "$source_dsg")" -maxdepth 1 -type f \
     -name '*dsg*mesh*.json' -print | sort | tail -n 1
