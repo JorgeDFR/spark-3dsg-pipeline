@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 ARG ROS_BUILD_IMAGE=osrf/ros:jazzy-desktop-full
-ARG ROS_RUNTIME_IMAGE=osrf/ros:jazzy-ros-base
+ARG ROS_RUNTIME_IMAGE=ros:jazzy-ros-base
 
 # Compilers, headers, source checkouts, and test tools stay in this stage.
 FROM ${ROS_BUILD_IMAGE} AS core-builder
@@ -92,12 +92,6 @@ RUN --mount=type=bind,from=core-builder,source=/home/spark/ros_ws/src,target=/tm
     && apt-get update \
     && rosdep install --from-paths /tmp/upstream-src --ignore-src -r -y \
          --rosdistro jazzy --dependency-types exec --skip-keys rviz2 \
-    && apt-get purge -y --no-auto-remove \
-         build-essential cmake g++ gcc git make pkg-config \
-         libcli11-dev libeigen3-dev libgoogle-glog-dev libzmq3-dev \
-         nlohmann-json3-dev pipx python3-colcon-common-extensions \
-         python3-colcon-core python3-pip python3-pytest python3-rosdep \
-         python3-vcstool ros-dev-tools \
     && rm -rf /var/lib/apt/lists/* /root/.ros/rosdep
 
 COPY --chown=${USER_UID}:${USER_GID} --from=core-builder \
@@ -136,10 +130,13 @@ RUN chmod +x docker/*.sh scripts/*.sh scripts/*.py \
     && "${DATA_TOOLS_ENV}/bin/pip" install --no-cache-dir --upgrade pip \
     && "${DATA_TOOLS_ENV}/bin/pip" install --no-cache-dir \
          --requirement "${PIPELINE_ROOT}/dependencies/data-tools.requirements.txt" \
-    && rosbags-convert --help >/dev/null \
-    && set +u \
+    && rosbags-convert --help >/dev/null
+
+RUN set +u \
+    && source /opt/ros/${ROS_DISTRO}/setup.bash \
     && source ${ROS_WS}/install/setup.bash \
     && set -u \
+    && command -v ros2 \
     && ros2 pkg prefix hydra_ros \
     && ros2 pkg prefix khronos_ros \
     && ros2 pkg prefix spark_3dsg_pipeline \

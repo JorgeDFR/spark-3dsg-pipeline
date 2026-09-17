@@ -12,11 +12,12 @@ make inspect DSG=/home/spark/output/run/dsg.json \
   INSPECT_ARGS=--require-pipeline-output
 ```
 
-Use `make dev-shell` for compiler, vcstool, pytest, or upstream-source access.
-The normal `core` and `gpu` shells are slim runtime environments by design.
-When diagnosing image size on a Docker-capable host, compare the final targets
-with `docker image ls` and inspect retained layers with `docker history`; builder
-image size is not representative of deployed runtime size.
+Use `make dev-shell` for the complete compiler environment, pytest, or upstream
+source access. The normal `core` and `gpu` shells exclude project source and
+workspace build trees. When diagnosing image size on a Docker-capable host,
+compare the final targets with `docker image ls` and inspect retained layers
+with `docker history`; builder image size is not representative of deployed
+runtime size.
 
 For file visualization, a missing path fails before launch and malformed JSON
 returns nonzero with a parse explanation. When given `dsg.json`, the wrapper

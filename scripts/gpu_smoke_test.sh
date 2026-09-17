@@ -6,11 +6,23 @@ model="${HOME:-/home/spark}/models/semantic_inference/yoloe-26m-seg.pt"
 
 python3 - "$model" <<'PY'
 import sys
+import PIL
 import torch
+import torchvision
+import ultralytics
 from ultralytics import YOLOE
 
+assert torch.__version__.split("+")[0] == "2.7.0", torch.__version__
+assert torchvision.__version__.split("+")[0] == "0.22.0", torchvision.__version__
+assert torch.version.cuda == "12.8", torch.version.cuda
 assert torch.cuda.is_available(), "CUDA is not available in this container"
 YOLOE(sys.argv[1])
-print(f"CUDA OK: {torch.cuda.get_device_name(0)}")
+print(f"PyTorch: {torch.__version__}; torchvision: {torchvision.__version__}")
+print(f"PyTorch CUDA: {torch.version.cuda}; cuDNN: {torch.backends.cudnn.version()}")
+print(f"Pillow: {PIL.__version__}; Ultralytics: {ultralytics.__version__}")
+print(
+    f"GPU: {torch.cuda.get_device_name(0)}; "
+    f"compute capability: {torch.cuda.get_device_capability(0)}"
+)
 print("YOLOE model load OK")
 PY

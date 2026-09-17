@@ -1,5 +1,6 @@
 # Direct Python requirements captured 2026-08-27. Torch/torchvision are installed
-# separately from the CUDA 12.8 wheel index in Dockerfile.gpu.
+# separately from the CUDA 12.8 wheel index in Dockerfile.gpu. Pillow is
+# explicit because the slim runtime must not inherit the builder's apt package.
 click==8.5.0
 distinctipy==1.3.4
 einops==0.8.2
@@ -7,6 +8,9 @@ imageio==2.37.4
 numpy==1.26.4
 onnx==1.22.0
 pandas==3.0.5
+pillow==11.3.0
+# Spark-Config 0.0.1 declares pytest as a runtime dependency upstream.
+pytest==8.3.5
 rich==15.0.0
 rosbags==0.11.5
 ruamel.yaml==0.19.1

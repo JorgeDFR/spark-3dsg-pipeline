@@ -3,42 +3,61 @@
 ARG CORE_BUILDER_IMAGE=spark-3dsg-core-builder:local
 ARG CORE_RUNTIME_IMAGE=spark-3dsg-core:local
 
-# CUDA compilers, TensorRT headers, and upstream source exist only here.
-FROM ${CORE_BUILDER_IMAGE} AS gpu-builder
-
+# Keep this compatibility set together. See dependencies/GPU_BASELINE.md.
+# CUDA 12.8 is the first PyTorch wheel family with Blackwell support and is the
+# stack used by the pinned Awesome-DCIST-T4 reference.
+ARG CUDA_SERIES=12-8
+ARG CUDA_CUDART_VERSION=12.8.90-1
+ARG CUDA_NVCC_VERSION=12.8.93-1
+ARG TENSORRT_VERSION=10.9.0.34-1+cuda12.8
 ARG TORCH_VERSION=2.7.0
 ARG TORCHVISION_VERSION=0.22.0
 ARG PYTORCH_INDEX=https://download.pytorch.org/whl/cu128
 
+# CUDA compilers, TensorRT headers, and upstream source exist only here.
+FROM ${CORE_BUILDER_IMAGE} AS gpu-builder
+
+ARG CUDA_SERIES
+ARG CUDA_CUDART_VERSION
+ARG CUDA_NVCC_VERSION
+ARG TENSORRT_VERSION
+ARG TORCH_VERSION
+ARG TORCHVISION_VERSION
+ARG PYTORCH_INDEX
+
 ENV SEMANTIC_ENV=/home/spark/.venvs/semantic_inference \
     SEMANTIC_INFERENCE_MODEL_DIR=/home/spark/models/semantic_inference \
-    PATH=/home/spark/.venvs/semantic_inference/bin:${PATH}
+    CUDA_HOME=/usr/local/cuda-12.8 \
+    PATH=/home/spark/.venvs/semantic_inference/bin:/usr/local/cuda-12.8/bin:${PATH}
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
-COPY dependencies/gpu.requirements.txt /tmp/gpu.requirements.txt
 
 RUN curl --fail --location --output /tmp/cuda-keyring.deb \
       https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
     && dpkg -i /tmp/cuda-keyring.deb \
     && apt-get update \
-    && version_info="$(apt-cache policy libnvinfer-dev)" \
-    && [[ "$version_info" =~ Candidate:\ [0-9.\-]+\+cuda([0-9]+)\.([0-9]+) ]] \
-    && cuda_nvcc="cuda-nvcc-${BASH_REMATCH[1]}-${BASH_REMATCH[2]}" \
     && apt-get install -y --no-install-recommends \
-         libnvinfer-dev libnvinfer-plugin-dev libnvonnxparsers-dev "$cuda_nvcc" \
-    && { \
-         for package in libnvinfer-dev libnvinfer-plugin-dev libnvonnxparsers-dev; do \
-           apt-cache depends "$package"; \
-         done; \
-       } \
-       | awk '/Depends: lib(nvinfer|nvinfer-plugin|nvonnxparsers)[0-9]+$/ {print $2}' \
-       | sort -u \
-       | while read -r package; do \
-           dpkg-query -W -f='${Package}=${Version}\n' "$package"; \
-         done \
-       > /tmp/tensorrt-runtime-packages.txt \
-    && test -s /tmp/tensorrt-runtime-packages.txt \
+         "cuda-toolkit-config-common=${CUDA_CUDART_VERSION}" \
+         "cuda-toolkit-12-config-common=${CUDA_CUDART_VERSION}" \
+         "cuda-toolkit-${CUDA_SERIES}-config-common=${CUDA_CUDART_VERSION}" \
+         "cuda-cccl-${CUDA_SERIES}=${CUDA_CUDART_VERSION}" \
+         "cuda-cudart-${CUDA_SERIES}=${CUDA_CUDART_VERSION}" \
+         "cuda-cudart-dev-${CUDA_SERIES}=${CUDA_CUDART_VERSION}" \
+         "cuda-driver-dev-${CUDA_SERIES}=${CUDA_CUDART_VERSION}" \
+         "cuda-crt-${CUDA_SERIES}=${CUDA_NVCC_VERSION}" \
+         "cuda-nvvm-${CUDA_SERIES}=${CUDA_NVCC_VERSION}" \
+         "cuda-nvcc-${CUDA_SERIES}=${CUDA_NVCC_VERSION}" \
+         "libnvinfer-headers-dev=${TENSORRT_VERSION}" \
+         "libnvinfer-headers-plugin-dev=${TENSORRT_VERSION}" \
+         "libnvinfer10=${TENSORRT_VERSION}" \
+         "libnvinfer-dev=${TENSORRT_VERSION}" \
+         "libnvinfer-plugin10=${TENSORRT_VERSION}" \
+         "libnvinfer-plugin-dev=${TENSORRT_VERSION}" \
+         "libnvonnxparsers10=${TENSORRT_VERSION}" \
+         "libnvonnxparsers-dev=${TENSORRT_VERSION}" \
+    && test "$(dpkg-query -W -f='${Version}' "cuda-nvcc-${CUDA_SERIES}")" = "${CUDA_NVCC_VERSION}" \
+    && test "$(dpkg-query -W -f='${Version}' libnvinfer-dev)" = "${TENSORRT_VERSION}" \
+    && /usr/local/cuda-12.8/bin/nvcc --version | grep -F 'release 12.8' \
     && rm -rf /var/lib/apt/lists/* /tmp/cuda-keyring.deb
 
 RUN set +u \
@@ -52,24 +71,40 @@ RUN set +u \
          --cmake-args \
            -DBUILD_TESTING=OFF \
            -DCMAKE_BUILD_TYPE=Release \
+           -DCUDAToolkit_ROOT=/usr/local/cuda-12.8 \
            -DSEMANTIC_INFERENCE_USE_TRT=ON
 
-RUN python3 -m venv --system-site-packages "${SEMANTIC_ENV}" \
-    && "${SEMANTIC_ENV}/bin/pip" install --no-cache-dir --upgrade pip \
-    && "${SEMANTIC_ENV}/bin/pip" install --no-cache-dir \
-         torch==${TORCH_VERSION} torchvision==${TORCHVISION_VERSION} --index-url ${PYTORCH_INDEX} \
-    && "${SEMANTIC_ENV}/bin/pip" install --no-cache-dir /home/spark/ros_ws/src/spark_config \
-    && "${SEMANTIC_ENV}/bin/pip" install --no-cache-dir \
+# Do not expose builder system packages to this environment. Otherwise pip can
+# accept (for example) the builder's apt Pillow as satisfying Ultralytics, then
+# leave it out of the venv copied into the smaller runtime image.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m venv "${SEMANTIC_ENV}" \
+    && "${SEMANTIC_ENV}/bin/pip" install --upgrade pip \
+    && "${SEMANTIC_ENV}/bin/pip" install \
+         torch==${TORCH_VERSION} torchvision==${TORCHVISION_VERSION} --index-url ${PYTORCH_INDEX}
+
+COPY dependencies/gpu.requirements.txt /tmp/gpu.requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    "${SEMANTIC_ENV}/bin/pip" install --no-deps \
+         /home/spark/ros_ws/src/spark_config \
+    && "${SEMANTIC_ENV}/bin/pip" install \
          --requirement /tmp/gpu.requirements.txt \
-    && "${SEMANTIC_ENV}/bin/pip" install --no-cache-dir \
+    && "${SEMANTIC_ENV}/bin/pip" install \
          --no-deps /home/spark/ros_ws/src/semantic_inference/semantic_inference \
-    && "${SEMANTIC_ENV}/bin/python" -c "import torch, ultralytics, semantic_inference"
+    && "${SEMANTIC_ENV}/bin/pip" check \
+    && "${SEMANTIC_ENV}/bin/python" -c \
+         "import PIL, semantic_inference, torch, torchvision, ultralytics; assert torch.__version__.split('+')[0] == '${TORCH_VERSION}'; assert torchvision.__version__.split('+')[0] == '${TORCHVISION_VERSION}'; assert torch.version.cuda == '12.8'"
 
 
 # Final GPU runtime contains neither NVCC, development headers, source nor build.
 FROM ${CORE_RUNTIME_IMAGE} AS gpu-runtime
 
 ARG DEBIAN_FRONTEND=noninteractive
+ARG CUDA_SERIES
+ARG CUDA_CUDART_VERSION
+ARG TENSORRT_VERSION
+ARG TORCH_VERSION
+ARG TORCHVISION_VERSION
 ENV SEMANTIC_ENV=/home/spark/.venvs/semantic_inference \
     SEMANTIC_INFERENCE_MODEL_DIR=/home/spark/models/semantic_inference \
     PATH=/home/spark/.venvs/semantic_inference/bin:${PATH}
@@ -77,15 +112,21 @@ ENV SEMANTIC_ENV=/home/spark/.venvs/semantic_inference \
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 USER root
 
-COPY --from=gpu-builder /tmp/tensorrt-runtime-packages.txt /tmp/tensorrt-runtime-packages.txt
 RUN curl --fail --location --output /tmp/cuda-keyring.deb \
       https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
     && dpkg -i /tmp/cuda-keyring.deb \
     && apt-get update \
-    && xargs -r apt-get install -y --no-install-recommends \
-         < /tmp/tensorrt-runtime-packages.txt \
-    && rm -rf /var/lib/apt/lists/* /tmp/cuda-keyring.deb \
-         /tmp/tensorrt-runtime-packages.txt
+    && apt-get install -y --no-install-recommends \
+         "cuda-toolkit-config-common=${CUDA_CUDART_VERSION}" \
+         "cuda-toolkit-12-config-common=${CUDA_CUDART_VERSION}" \
+         "cuda-toolkit-${CUDA_SERIES}-config-common=${CUDA_CUDART_VERSION}" \
+         "cuda-cudart-${CUDA_SERIES}=${CUDA_CUDART_VERSION}" \
+         "libnvinfer10=${TENSORRT_VERSION}" \
+         "libnvinfer-plugin10=${TENSORRT_VERSION}" \
+         "libnvonnxparsers10=${TENSORRT_VERSION}" \
+    && test "$(dpkg-query -W -f='${Version}' "cuda-cudart-${CUDA_SERIES}")" = "${CUDA_CUDART_VERSION}" \
+    && test "$(dpkg-query -W -f='${Version}' libnvinfer10)" = "${TENSORRT_VERSION}" \
+    && rm -rf /var/lib/apt/lists/* /tmp/cuda-keyring.deb
 
 COPY --chown=spark:spark --from=gpu-builder \
      /home/spark/ros_ws/install /home/spark/ros_ws/install
@@ -93,10 +134,15 @@ COPY --chown=spark:spark --from=gpu-builder \
      /home/spark/.venvs/semantic_inference /home/spark/.venvs/semantic_inference
 
 RUN set +u \
+    && source /opt/ros/jazzy/setup.bash \
     && source /home/spark/ros_ws/install/setup.bash \
     && set -u \
+    && test -f /home/spark/ros_ws/install/lib/libsemantic_inference.so \
+    && ldd /home/spark/ros_ws/install/lib/libsemantic_inference.so | grep -F 'libnvinfer.so.10 =>' \
+    && ! ldd /home/spark/ros_ws/install/lib/libsemantic_inference.so | grep -F 'not found' \
+    && /home/spark/.venvs/semantic_inference/bin/pip check \
     && /home/spark/.venvs/semantic_inference/bin/python \
-         -c "import torch, ultralytics, semantic_inference"
+         -c "import PIL, rclpy, semantic_inference, torch, torchvision, ultralytics; assert torch.__version__.split('+')[0] == '${TORCH_VERSION}'; assert torchvision.__version__.split('+')[0] == '${TORCHVISION_VERSION}'; assert torch.version.cuda == '12.8'"
 
 USER spark
 ENTRYPOINT ["/home/spark/spark-3dsg-pipeline/docker/ros_entrypoint.sh"]

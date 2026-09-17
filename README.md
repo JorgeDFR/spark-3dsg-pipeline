@@ -23,7 +23,9 @@ The hierarchical graph is `OBJECTS -> PLACES -> ROOMS -> BUILDINGS`.
 
 Host requirements are Docker and, for GPU execution, an NVIDIA driver plus
 NVIDIA Container Toolkit. Do not install ROS, CUDA, or runtime Python packages
-on the host.
+on the host. The GPU image uses a qualified CUDA 12.8 / TensorRT 10.9 / PyTorch
+2.7 stack; see the [GPU compatibility baseline](dependencies/GPU_BASELINE.md)
+for supported drivers and GPUs and an explanation of `nvidia-smi`'s CUDA value.
 
 ```bash
 cp .env.example .env
@@ -35,13 +37,13 @@ make models PROFILE=gpu
 `make models` downloads and checksums both the closed-set ONNX model and YOLOE
 weights into the mounted model directory. See [model setup](docs/MODELS.md).
 
-The Docker build is multi-stage. Mapping uses a ROS Base runtime containing
-only runtime dependencies and a self-contained ROS install space. Compilers,
-upstream source, build trees, tests, CUDA NVCC, and TensorRT headers stay in
-builder/development targets. RViz is a separate image and does not inherit the
-GPU inference environment. Use `make dev-shell` when build tools or upstream
-source are needed; package/launch/configuration changes require rebuilding a
-runtime image.
+The Docker build is multi-stage. Mapping uses a ROS Base runtime with only the
+resolved `exec` dependencies and a self-contained ROS install space. Compilers,
+upstream source, workspace build trees, tests, CUDA NVCC, and TensorRT headers
+added by this project stay in builder/development targets. RViz is a separate
+image and does not inherit the GPU inference environment. Use `make dev-shell`
+when upstream source or the complete project build environment is needed;
+package/launch/configuration changes require rebuilding a runtime image.
 
 ## Mapping examples
 

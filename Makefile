@@ -22,7 +22,7 @@ else
 $(error PROFILE must be core or gpu)
 endif
 
-.PHONY: help build models prepare-data shell dev-shell validate-bag run inspect rviz test lint clean config lock-dependencies
+.PHONY: help build models prepare-data shell dev-shell validate-bag run inspect rviz gpu-smoke test lint clean config lock-dependencies
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "; printf "Usage: make <target> [PROFILE=core|gpu] [VAR=value]\n\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -72,6 +72,10 @@ rviz: ## Visualize live or DSG=...; optionally set VISUALIZATION_PROFILE=...
 		$(if $(VISUALIZATION_PROFILE),,--dataset "$(DATASET)") \
 		$(if $(VISUALIZATION_PROFILE),--profile "$(VISUALIZATION_PROFILE)",) \
 		$(if $(DSG),--dsg "$(DSG)",)
+
+gpu-smoke: ## Check the pinned GPU stack and load the downloaded YOLOE model
+	@$(COMPOSE) --profile gpu run --rm pipeline \
+		$(PIPELINE_ROOT)/scripts/gpu_smoke_test.sh
 
 test: ## Run repository tests inside the development image
 	@$(COMPOSE) --profile dev run --rm --build core-dev $(PIPELINE_ROOT)/scripts/run_tests.sh

@@ -285,12 +285,21 @@ def test_release_images_use_separate_builder_and_runtime_stages():
     assert "AS core-runtime" in core
     assert "AS core-development" in core
     assert "AS rviz-runtime" in core
-    assert "osrf/ros:jazzy-ros-base" in core
+    assert "ARG ROS_RUNTIME_IMAGE=ros:jazzy-ros-base" in core
+    assert "osrf/ros:jazzy-ros-base" not in core
     assert "--from=core-builder" in core
     assert "${ROS_WS}/install ${ROS_WS}/install" in core
     assert "COPY --chown=${USER_UID}:${USER_GID}" in core
     assert "--dependency-types exec" in core
-    assert "apt-get purge -y --no-auto-remove" in core
+    assert "apt-get purge" not in core
+    runtime = core.split("AS core-runtime", 1)[1].split(
+        "AS core-development", 1
+    )[0]
+    assert "source /opt/ros/${ROS_DISTRO}/setup.bash" in runtime
+    assert "command -v ros2" in runtime
+    assert runtime.index("source /opt/ros/${ROS_DISTRO}/setup.bash") < runtime.index(
+        "source ${ROS_WS}/install/setup.bash"
+    )
     assert "SPARK_SYMLINK_INSTALL=OFF" in core
     assert "-DBUILD_TESTING=${SPARK_BUILD_TESTING:-OFF}" in build_script
     assert "--symlink-install" not in build_script.split("colcon_args=(", 1)[1].split(")", 1)[0]
@@ -304,6 +313,63 @@ def test_release_images_use_separate_builder_and_runtime_stages():
     runtime = gpu.split("AS gpu-runtime", 1)[1]
     assert "cuda-nvcc" not in runtime
     assert "libnvinfer-dev" not in runtime
+
+
+def test_gpu_stack_is_exact_and_runtime_python_is_self_contained():
+    gpu = (ROOT / "docker/Dockerfile.gpu").read_text(encoding="utf-8")
+    requirements = (ROOT / "dependencies/gpu.requirements.txt").read_text(
+        encoding="utf-8"
+    )
+    baseline = (ROOT / "dependencies/GPU_BASELINE.md").read_text(encoding="utf-8")
+
+    expected = {
+        "ARG CUDA_CUDART_VERSION=12.8.90-1",
+        "ARG CUDA_NVCC_VERSION=12.8.93-1",
+        "ARG TENSORRT_VERSION=10.9.0.34-1+cuda12.8",
+        "ARG TORCH_VERSION=2.7.0",
+        "ARG TORCHVISION_VERSION=0.22.0",
+        "ARG PYTORCH_INDEX=https://download.pytorch.org/whl/cu128",
+    }
+    assert expected <= set(gpu.splitlines())
+    assert "apt-cache policy libnvinfer-dev" not in gpu
+    assert "Candidate:" not in gpu
+    for package in (
+        "cuda-toolkit-config-common",
+        "cuda-toolkit-12-config-common",
+        "cuda-toolkit-${CUDA_SERIES}-config-common",
+        "cuda-cccl-${CUDA_SERIES}",
+        "cuda-cudart-${CUDA_SERIES}",
+        "cuda-cudart-dev-${CUDA_SERIES}",
+        "cuda-driver-dev-${CUDA_SERIES}",
+    ):
+        assert f'"{package}=${{CUDA_CUDART_VERSION}}"' in gpu
+    for package in (
+        "cuda-crt-${CUDA_SERIES}",
+        "cuda-nvvm-${CUDA_SERIES}",
+        "cuda-nvcc-${CUDA_SERIES}",
+    ):
+        assert f'"{package}=${{CUDA_NVCC_VERSION}}"' in gpu
+    for package in (
+        "libnvinfer-headers-dev",
+        "libnvinfer-headers-plugin-dev",
+        "libnvinfer10",
+        "libnvinfer-dev",
+        "libnvinfer-plugin10",
+        "libnvinfer-plugin-dev",
+        "libnvonnxparsers10",
+        "libnvonnxparsers-dev",
+    ):
+        assert f'"{package}=${{TENSORRT_VERSION}}"' in gpu
+    assert 'python3 -m venv "${SEMANTIC_ENV}"' in gpu
+    assert 'venv --system-site-packages "${SEMANTIC_ENV}"' not in gpu
+    assert "import PIL, rclpy, semantic_inference" in gpu
+    assert "pillow==11.3.0" in requirements
+    assert "driver 580.173.02" in baseline
+    assert "CUDA 13.0" in baseline
+    assert "pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime" in baseline
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "gpu-smoke:" in makefile
+    assert "scripts/gpu_smoke_test.sh" in makefile
 
 
 def test_compose_uses_slim_runtime_dev_and_rviz_targets():

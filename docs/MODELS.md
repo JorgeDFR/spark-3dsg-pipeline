@@ -7,6 +7,10 @@ committed. Run:
 make models PROFILE=gpu
 ```
 
+The model runtime is the pinned compatibility set in
+[`dependencies/GPU_BASELINE.md`](../dependencies/GPU_BASELINE.md). Do not
+independently update PyTorch, CUDA, TensorRT, or cuDNN.
+
 The downloader verifies fixed SHA-256 hashes for:
 
 - `yoloe-26m-seg.pt`, used by open-set instance segmentation;

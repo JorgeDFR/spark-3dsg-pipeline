@@ -63,11 +63,14 @@ its install space to be copied into runtime images. Runtime apt dependencies are
 resolved from the builder source through a temporary BuildKit mount. The GPU
 builder adds NVCC and TensorRT headers, but the final image receives only the
 TensorRT runtime packages, rebuilt ROS install, and semantic-inference virtual
-environment. RViz is kept separate from GPU inference.
+environment. CUDA, TensorRT, PyTorch, torchvision, and cuDNN form the qualified
+set documented in [`dependencies/GPU_BASELINE.md`](../dependencies/GPU_BASELINE.md).
+RViz is kept separate from GPU inference.
 
 `core-runtime`, `gpu-runtime`, and `rviz-runtime` run as the non-root `spark`
-user. `core-development` is deliberately larger and is used by `make test`,
-`make lint`, `make lock-dependencies`, and `make dev-shell`.
+user. `core-development` retains the complete upstream source and workspace
+build trees and is used by `make test`, `make lint`, `make lock-dependencies`,
+and `make dev-shell`.
 
 ## Reproducibility
 
