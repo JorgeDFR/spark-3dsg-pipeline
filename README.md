@@ -35,6 +35,14 @@ make models PROFILE=gpu
 `make models` downloads and checksums both the closed-set ONNX model and YOLOE
 weights into the mounted model directory. See [model setup](docs/MODELS.md).
 
+The Docker build is multi-stage. Mapping uses a ROS Base runtime containing
+only runtime dependencies and a self-contained ROS install space. Compilers,
+upstream source, build trees, tests, CUDA NVCC, and TensorRT headers stay in
+builder/development targets. RViz is a separate image and does not inherit the
+GPU inference environment. Use `make dev-shell` when build tools or upstream
+source are needed; package/launch/configuration changes require rebuilding a
+runtime image.
+
 ## Mapping examples
 
 ```bash
@@ -100,9 +108,11 @@ make test PROFILE=core
 make lint PROFILE=core
 ```
 
-Repository-only tests may also run from the ignored `.venv`. GPU/runtime smoke
-tests are described in [debugging](docs/DEBUGGING.md). Model, bag, mesh, and
-output artifacts remain untracked.
+These targets build and use the development image automatically; they do not
+add test tools to mapping images. Repository-only tests may also run from the
+ignored `.venv`. GPU/runtime smoke tests are described in
+[debugging](docs/DEBUGGING.md). Model, bag, mesh, and output artifacts remain
+untracked.
 
 Further detail: [architecture](docs/ARCHITECTURE.md), [datasets](docs/DATASETS.md),
 [input contract](docs/INPUT_CONTRACT.md), and

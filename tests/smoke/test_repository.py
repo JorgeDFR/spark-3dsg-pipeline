@@ -272,3 +272,57 @@ def test_non_root_runtime_and_artifact_ignores_remain():
     for suffix in ("*.pt", "*.bag", "*.db3", "*.mcap", "*.ply"):
         assert suffix in (ROOT / ".gitignore").read_text()
         assert suffix in (ROOT / ".dockerignore").read_text()
+
+
+def test_release_images_use_separate_builder_and_runtime_stages():
+    core = (ROOT / "docker/Dockerfile.core").read_text(encoding="utf-8")
+    gpu = (ROOT / "docker/Dockerfile.gpu").read_text(encoding="utf-8")
+    build_script = (ROOT / "scripts/build_workspace.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "AS core-builder" in core
+    assert "AS core-runtime" in core
+    assert "AS core-development" in core
+    assert "AS rviz-runtime" in core
+    assert "osrf/ros:jazzy-ros-base" in core
+    assert "--from=core-builder" in core
+    assert "${ROS_WS}/install ${ROS_WS}/install" in core
+    assert "COPY --chown=${USER_UID}:${USER_GID}" in core
+    assert "--dependency-types exec" in core
+    assert "apt-get purge -y --no-auto-remove" in core
+    assert "SPARK_SYMLINK_INSTALL=OFF" in core
+    assert "-DBUILD_TESTING=${SPARK_BUILD_TESTING:-OFF}" in build_script
+    assert "--symlink-install" not in build_script.split("colcon_args=(", 1)[1].split(")", 1)[0]
+
+    assert "AS gpu-builder" in gpu
+    assert "AS gpu-runtime" in gpu
+    assert "COPY --chown=spark:spark --from=gpu-builder" in gpu
+    assert "/home/spark/ros_ws/install /home/spark/ros_ws/install" in gpu
+    assert "/home/spark/.venvs/semantic_inference /home/spark/.venvs/semantic_inference" in gpu
+    assert "chown -R spark:spark" not in gpu
+    runtime = gpu.split("AS gpu-runtime", 1)[1]
+    assert "cuda-nvcc" not in runtime
+    assert "libnvinfer-dev" not in runtime
+
+
+def test_compose_uses_slim_runtime_dev_and_rviz_targets():
+    compose = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
+    targets = {
+        "core-builder": "core-builder",
+        "core": "core-runtime",
+        "core-dev": "core-development",
+        "pipeline": "gpu-runtime",
+        "data-setup": "core-runtime",
+        "rviz": "rviz-runtime",
+    }
+    for service, target in targets.items():
+        assert compose["services"][service]["build"]["target"] == target
+
+    assert compose["services"]["rviz"]["image"] == "spark-3dsg-rviz:local"
+    assert "gpus" not in compose["services"]["rviz"]
+    assert compose["services"]["pipeline"]["gpus"] == "all"
+
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "--profile dev run --rm --build core-dev" in makefile
+    assert "--profile rviz run --rm --build rviz" in makefile

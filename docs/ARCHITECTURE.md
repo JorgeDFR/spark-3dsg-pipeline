@@ -46,6 +46,29 @@ plus `MESH_PLACES`. Its connector makes mesh places parents of objects.
 The repository does not implement reconstruction, tracking, or DSG algorithms.
 It does not modify upstream source.
 
+## Container architecture
+
+Release builds use independent builder and runtime stages:
+
+```text
+core-builder (desktop + toolchain + exact-SHA source)
+  |-- core-development (tests and maintenance only)
+  `-- self-contained ROS install --> core-runtime (ROS Base)
+                                      |-- gpu-runtime
+                                      `-- rviz-runtime
+```
+
+The release ROS workspace is built without `--symlink-install`, allowing only
+its install space to be copied into runtime images. Runtime apt dependencies are
+resolved from the builder source through a temporary BuildKit mount. The GPU
+builder adds NVCC and TensorRT headers, but the final image receives only the
+TensorRT runtime packages, rebuilt ROS install, and semantic-inference virtual
+environment. RViz is kept separate from GPU inference.
+
+`core-runtime`, `gpu-runtime`, and `rviz-runtime` run as the non-root `spark`
+user. `core-development` is deliberately larger and is used by `make test`,
+`make lint`, `make lock-dependencies`, and `make dev-shell`.
+
 ## Reproducibility
 
 `dependencies/locks/v1.lock.repos` is the machine-consumed exact-SHA snapshot.

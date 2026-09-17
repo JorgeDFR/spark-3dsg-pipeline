@@ -22,7 +22,7 @@ else
 $(error PROFILE must be core or gpu)
 endif
 
-.PHONY: help build models prepare-data shell validate-bag run inspect rviz test lint clean config lock-dependencies
+.PHONY: help build models prepare-data shell dev-shell validate-bag run inspect rviz test lint clean config lock-dependencies
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*## "; printf "Usage: make <target> [PROFILE=core|gpu] [VAR=value]\n\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -33,9 +33,12 @@ config: ## Validate the resolved Compose configuration
 build: ## Build the exact-SHA v1 snapshot with PROFILE=core|gpu
 ifeq ($(PROFILE),core)
 	@$(COMPOSE) --profile core build core
+	@$(COMPOSE) --profile rviz build rviz
 else ifeq ($(PROFILE),gpu)
 	@$(COMPOSE) --profile core build core
+	@$(COMPOSE) --profile build build core-builder
 	@$(COMPOSE) --profile gpu build pipeline
+	@$(COMPOSE) --profile rviz build rviz
 endif
 
 models: ## Download/checksum closed-set and YOLOE weights into the model mount
@@ -47,6 +50,9 @@ prepare-data: ## Detect/extract/convert known Spot and uHumans2 example bags
 
 shell: ## Open an interactive shell in the selected image
 	@$(COMPOSE) --profile $(PROFILE) run --rm $(SERVICE) bash
+
+dev-shell: ## Open the compiler/source development image
+	@$(COMPOSE) --profile dev run --rm --build core-dev bash
 
 validate-bag: ## Validate BAG against DATASET before mapping
 	@test -n "$(BAG)" || { echo "BAG is required (container path, normally $(CONTAINER_HOME)/data/...)" >&2; exit 2; }
@@ -61,20 +67,20 @@ inspect: ## Inspect DSG=/home/spark/output/.../dsg.json
 	@$(COMPOSE) --profile core run --rm core python3 $(PIPELINE_ROOT)/scripts/inspect_dsg.py "$(DSG)" $(INSPECT_ARGS)
 
 rviz: ## Visualize live or DSG=...; optionally set VISUALIZATION_PROFILE=...
-	@$(COMPOSE) --profile rviz run --rm rviz \
+	@$(COMPOSE) --profile rviz run --rm --build rviz \
 		$(PIPELINE_ROOT)/scripts/run_visualization.sh \
 		$(if $(VISUALIZATION_PROFILE),,--dataset "$(DATASET)") \
 		$(if $(VISUALIZATION_PROFILE),--profile "$(VISUALIZATION_PROFILE)",) \
 		$(if $(DSG),--dsg "$(DSG)",)
 
-test: ## Run repository tests inside the core image
-	@$(COMPOSE) --profile core run --rm core $(PIPELINE_ROOT)/scripts/run_tests.sh
+test: ## Run repository tests inside the development image
+	@$(COMPOSE) --profile dev run --rm --build core-dev $(PIPELINE_ROOT)/scripts/run_tests.sh
 
-lint: ## Run static repository checks inside the core image
-	@$(COMPOSE) --profile core run --rm core $(PIPELINE_ROOT)/scripts/run_lint.sh
+lint: ## Run static repository checks inside the development image
+	@$(COMPOSE) --profile dev run --rm --build core-dev $(PIPELINE_ROOT)/scripts/run_lint.sh
 
 lock-dependencies: ## Resolve branch manifest to exact SHAs (maintainer command)
-	@$(COMPOSE) --profile core run --rm -v "$(CURDIR)/dependencies:$(PIPELINE_ROOT)/dependencies" core $(PIPELINE_ROOT)/scripts/lock_dependencies.sh
+	@$(COMPOSE) --profile dev run --rm --build -v "$(CURDIR)/dependencies:$(PIPELINE_ROOT)/dependencies" core-dev $(PIPELINE_ROOT)/scripts/lock_dependencies.sh
 
 clean: ## Remove local build/test products (never data, models, or output)
 	@$(COMPOSE) down --remove-orphans

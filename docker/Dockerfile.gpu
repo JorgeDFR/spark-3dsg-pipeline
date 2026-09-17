@@ -1,4 +1,10 @@
-FROM spark-3dsg-core:local
+# syntax=docker/dockerfile:1.7
+
+ARG CORE_BUILDER_IMAGE=spark-3dsg-core-builder:local
+ARG CORE_RUNTIME_IMAGE=spark-3dsg-core:local
+
+# CUDA compilers, TensorRT headers, and upstream source exist only here.
+FROM ${CORE_BUILDER_IMAGE} AS gpu-builder
 
 ARG TORCH_VERSION=2.7.0
 ARG TORCHVISION_VERSION=0.22.0
@@ -10,9 +16,8 @@ ENV SEMANTIC_ENV=/home/spark/.venvs/semantic_inference \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-USER root
+COPY dependencies/gpu.requirements.txt /tmp/gpu.requirements.txt
 
-# Configure the closed-set frontend only after CUDA and TensorRT are present.
 RUN curl --fail --location --output /tmp/cuda-keyring.deb \
       https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
     && dpkg -i /tmp/cuda-keyring.deb \
@@ -22,6 +27,18 @@ RUN curl --fail --location --output /tmp/cuda-keyring.deb \
     && cuda_nvcc="cuda-nvcc-${BASH_REMATCH[1]}-${BASH_REMATCH[2]}" \
     && apt-get install -y --no-install-recommends \
          libnvinfer-dev libnvinfer-plugin-dev libnvonnxparsers-dev "$cuda_nvcc" \
+    && { \
+         for package in libnvinfer-dev libnvinfer-plugin-dev libnvonnxparsers-dev; do \
+           apt-cache depends "$package"; \
+         done; \
+       } \
+       | awk '/Depends: lib(nvinfer|nvinfer-plugin|nvonnxparsers)[0-9]+$/ {print $2}' \
+       | sort -u \
+       | while read -r package; do \
+           dpkg-query -W -f='${Package}=${Version}\n' "$package"; \
+         done \
+       > /tmp/tensorrt-runtime-packages.txt \
+    && test -s /tmp/tensorrt-runtime-packages.txt \
     && rm -rf /var/lib/apt/lists/* /tmp/cuda-keyring.deb
 
 RUN set +u \
@@ -29,25 +46,58 @@ RUN set +u \
     && source /home/spark/ros_ws/install/setup.bash \
     && set -u \
     && cd /home/spark/ros_ws \
-    && colcon build --symlink-install \
+    && colcon build --merge-install \
          --packages-select semantic_inference semantic_inference_ros \
          --cmake-force-configure \
-         --cmake-args -DCMAKE_BUILD_TYPE=Release -DSEMANTIC_INFERENCE_USE_TRT=ON
+         --cmake-args \
+           -DBUILD_TESTING=OFF \
+           -DCMAKE_BUILD_TYPE=Release \
+           -DSEMANTIC_INFERENCE_USE_TRT=ON
 
-USER spark
-
-RUN python3 -m venv --system-site-packages ${SEMANTIC_ENV} \
-    && ${SEMANTIC_ENV}/bin/pip install --no-cache-dir --upgrade pip \
-    && ${SEMANTIC_ENV}/bin/pip install --no-cache-dir \
+RUN python3 -m venv --system-site-packages "${SEMANTIC_ENV}" \
+    && "${SEMANTIC_ENV}/bin/pip" install --no-cache-dir --upgrade pip \
+    && "${SEMANTIC_ENV}/bin/pip" install --no-cache-dir \
          torch==${TORCH_VERSION} torchvision==${TORCHVISION_VERSION} --index-url ${PYTORCH_INDEX} \
-    && ${SEMANTIC_ENV}/bin/pip install --no-cache-dir /home/spark/ros_ws/src/spark_config \
-    && ${SEMANTIC_ENV}/bin/pip install --no-cache-dir \
-         --requirement /home/spark/spark-3dsg-pipeline/dependencies/gpu.requirements.txt \
-    && ${SEMANTIC_ENV}/bin/pip install --no-cache-dir \
+    && "${SEMANTIC_ENV}/bin/pip" install --no-cache-dir /home/spark/ros_ws/src/spark_config \
+    && "${SEMANTIC_ENV}/bin/pip" install --no-cache-dir \
+         --requirement /tmp/gpu.requirements.txt \
+    && "${SEMANTIC_ENV}/bin/pip" install --no-cache-dir \
          --no-deps /home/spark/ros_ws/src/semantic_inference/semantic_inference \
-    && ${SEMANTIC_ENV}/bin/python -c "import torch, ultralytics, semantic_inference"
+    && "${SEMANTIC_ENV}/bin/python" -c "import torch, ultralytics, semantic_inference"
+
+
+# Final GPU runtime contains neither NVCC, development headers, source nor build.
+FROM ${CORE_RUNTIME_IMAGE} AS gpu-runtime
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV SEMANTIC_ENV=/home/spark/.venvs/semantic_inference \
+    SEMANTIC_INFERENCE_MODEL_DIR=/home/spark/models/semantic_inference \
+    PATH=/home/spark/.venvs/semantic_inference/bin:${PATH}
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+USER root
+
+COPY --from=gpu-builder /tmp/tensorrt-runtime-packages.txt /tmp/tensorrt-runtime-packages.txt
+RUN curl --fail --location --output /tmp/cuda-keyring.deb \
+      https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
+    && dpkg -i /tmp/cuda-keyring.deb \
+    && apt-get update \
+    && xargs -r apt-get install -y --no-install-recommends \
+         < /tmp/tensorrt-runtime-packages.txt \
+    && rm -rf /var/lib/apt/lists/* /tmp/cuda-keyring.deb \
+         /tmp/tensorrt-runtime-packages.txt
+
+COPY --chown=spark:spark --from=gpu-builder \
+     /home/spark/ros_ws/install /home/spark/ros_ws/install
+COPY --chown=spark:spark --from=gpu-builder \
+     /home/spark/.venvs/semantic_inference /home/spark/.venvs/semantic_inference
+
+RUN set +u \
+    && source /home/spark/ros_ws/install/setup.bash \
+    && set -u \
+    && /home/spark/.venvs/semantic_inference/bin/python \
+         -c "import torch, ultralytics, semantic_inference"
 
 USER spark
-
 ENTRYPOINT ["/home/spark/spark-3dsg-pipeline/docker/ros_entrypoint.sh"]
 CMD ["bash"]

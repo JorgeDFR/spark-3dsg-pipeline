@@ -11,14 +11,21 @@ x-common: &common
     - ${MODEL_DIR:-./models}:/home/spark/models
     - ${OUTPUT_DIR:-./output}:/home/spark/output
     - ./examples:/home/spark/examples:ro
-    - ${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:/home/spark/ros_ws/src/spark_3dsg_pipeline
     - spark-cache:/home/spark/.cache
-    - ./scripts:/home/spark/spark-3dsg-pipeline/scripts #TEMP
+    - ./scripts:/home/spark/spark-3dsg-pipeline/scripts:ro
   working_dir: /home/spark/spark-3dsg-pipeline
   stdin_open: true
   tty: true
 
 services:
+  core-builder:
+    profiles: [build]
+    image: spark-3dsg-core-builder:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.core
+      target: core-builder
+
   core:
     <<: *common
     profiles: [core]
@@ -26,9 +33,30 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.core
+      target: core-runtime
       args:
         USER_UID: ${HOST_UID:-1000}
         USER_GID: ${HOST_GID:-1000}
+
+  core-dev:
+    <<: *common
+    profiles: [dev]
+    image: spark-3dsg-core-dev:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.core
+      target: core-development
+      args:
+        USER_UID: ${HOST_UID:-1000}
+        USER_GID: ${HOST_GID:-1000}
+    volumes:
+      - ${DATA_DIR:-./data}:/home/spark/data:ro
+      - ${MODEL_DIR:-./models}:/home/spark/models
+      - ${OUTPUT_DIR:-./output}:/home/spark/output
+      - ./examples:/home/spark/examples:ro
+      - ${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:/home/spark/ros_ws/src/spark_3dsg_pipeline
+      - spark-cache:/home/spark/.cache
+      - ./scripts:/home/spark/spark-3dsg-pipeline/scripts:ro
 
   pipeline:
     <<: *common
@@ -37,6 +65,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.gpu
+      target: gpu-runtime
     gpus: all
 
   data-setup:
@@ -45,6 +74,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.core
+      target: core-runtime
       args:
         USER_UID: ${HOST_UID:-1000}
         USER_GID: ${HOST_GID:-1000}
@@ -56,7 +86,14 @@ services:
   rviz:
     <<: *common
     profiles: [rviz]
-    image: spark-3dsg-gpu:local
+    image: spark-3dsg-rviz:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.core
+      target: rviz-runtime
+      args:
+        USER_UID: ${HOST_UID:-1000}
+        USER_GID: ${HOST_GID:-1000}
     environment:
       ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
       RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
@@ -67,12 +104,10 @@ services:
       - ${MODEL_DIR:-./models}:/home/spark/models
       - ${OUTPUT_DIR:-./output}:/home/spark/output
       - ./examples:/home/spark/examples:ro
-      - ${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:/home/spark/ros_ws/src/spark_3dsg_pipeline
       - spark-cache:/home/spark/.cache
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - ./scripts:/home/spark/spark-3dsg-pipeline/scripts #TEMP
+      - ./scripts:/home/spark/spark-3dsg-pipeline/scripts:ro
     command: ["/home/spark/spark-3dsg-pipeline/scripts/run_visualization.sh", "--dataset", "spot"]
-    gpus: all
 
 volumes:
   spark-cache:

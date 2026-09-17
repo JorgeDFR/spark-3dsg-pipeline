@@ -1,7 +1,7 @@
 # Updating upstream dependencies
 
 1. Edit `dependencies/upstream-public.repos` as a coordinated compatible set.
-2. Run `make lock-dependencies` in the core Docker image.
+2. Run `make lock-dependencies` in the development Docker image.
 3. Review every exact SHA in `dependencies/locks/v1.lock.repos`.
 4. Update `dependencies/UPSTREAM_BASELINE.md` with provenance and compatibility
    notes.

@@ -30,8 +30,8 @@ def config_directory() -> Path:
     explicit = os.environ.get("PIPELINE_DATASET_CONFIG_DIR")
     candidates = [
         Path(explicit) if explicit else None,
-        Path("/home/spark/ros_ws/src/spark_3dsg_pipeline/config/datasets"),
         Path("/home/spark/ros_ws/install/share/spark_3dsg_pipeline/config/datasets"),
+        Path("/home/spark/ros_ws/src/spark_3dsg_pipeline/config/datasets"),
         Path(__file__).resolve().parents[1]
         / "src/spark_3dsg_pipeline/config/datasets",
     ]

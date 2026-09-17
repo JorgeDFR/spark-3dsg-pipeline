@@ -1,8 +1,12 @@
-FROM osrf/ros:jazzy-desktop-full
+# syntax=docker/dockerfile:1.7
+
+ARG ROS_BUILD_IMAGE=osrf/ros:jazzy-desktop-full
+ARG ROS_RUNTIME_IMAGE=osrf/ros:jazzy-ros-base
+
+# Compilers, headers, source checkouts, and test tools stay in this stage.
+FROM ${ROS_BUILD_IMAGE} AS core-builder
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG USER_UID=1000
-ARG USER_GID=1000
 ENV ROS_DISTRO=jazzy \
     ROS_WS=/home/spark/ros_ws \
     PIPELINE_ROOT=/home/spark/spark-3dsg-pipeline \
@@ -45,17 +49,122 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY scripts/build_workspace.sh /tmp/build_workspace.sh
-RUN /tmp/build_workspace.sh ${ROS_WS}
+RUN SPARK_BUILD_TESTING=OFF SPARK_SYMLINK_INSTALL=OFF \
+    /tmp/build_workspace.sh ${ROS_WS}
 
+RUN set +u \
+    && source ${ROS_WS}/install/setup.bash \
+    && set -u \
+    && ros2 pkg prefix hydra_ros \
+    && ros2 pkg prefix khronos_ros \
+    && ros2 pkg prefix spark_3dsg_pipeline \
+    && python3 -c 'import spark_dsg'
+
+
+# Runtime starts again from ros-base. Runtime rosdeps are resolved from the
+# exact source tree with a BuildKit bind mount; the source never enters a layer.
+FROM ${ROS_RUNTIME_IMAGE} AS core-runtime
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG USER_UID=1000
+ARG USER_GID=1000
+ENV ROS_DISTRO=jazzy \
+    ROS_WS=/home/spark/ros_ws \
+    PIPELINE_ROOT=/home/spark/spark-3dsg-pipeline \
+    PYTHONUNBUFFERED=1 \
+    DATA_TOOLS_ENV=/home/spark/.venvs/data-tools \
+    PATH=/home/spark/.venvs/data-tools/bin:${PATH}
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      python3-venv \
+      python3-yaml \
+      ros-jazzy-rmw-fastrtps-cpp \
+      ros-jazzy-rosbag2-storage-mcap \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN --mount=type=bind,from=core-builder,source=/home/spark/ros_ws/src,target=/tmp/upstream-src \
+    (rosdep init 2>/dev/null || true) \
+    && rosdep update --rosdistro jazzy \
+    && apt-get update \
+    && rosdep install --from-paths /tmp/upstream-src --ignore-src -r -y \
+         --rosdistro jazzy --dependency-types exec --skip-keys rviz2 \
+    && apt-get purge -y --no-auto-remove \
+         build-essential cmake g++ gcc git make pkg-config \
+         libcli11-dev libeigen3-dev libgoogle-glog-dev libzmq3-dev \
+         nlohmann-json3-dev pipx python3-colcon-common-extensions \
+         python3-colcon-core python3-pip python3-pytest python3-rosdep \
+         python3-vcstool ros-dev-tools \
+    && rm -rf /var/lib/apt/lists/* /root/.ros/rosdep
+
+COPY --chown=${USER_UID}:${USER_GID} --from=core-builder \
+     ${ROS_WS}/install ${ROS_WS}/install
+
+WORKDIR ${PIPELINE_ROOT}
+COPY --chown=${USER_UID}:${USER_GID} dependencies ${PIPELINE_ROOT}/dependencies
+COPY --chown=${USER_UID}:${USER_GID} scripts ${PIPELINE_ROOT}/scripts
+COPY --chown=${USER_UID}:${USER_GID} docker/ros_entrypoint.sh \
+     ${PIPELINE_ROOT}/docker/ros_entrypoint.sh
+
+# Keep bind-mounted model and output files owned by the invoking host user.
+RUN set -eux; \
+    if getent group spark >/dev/null; then \
+      groupmod --non-unique --gid "${USER_GID}" spark; \
+    else \
+      groupadd --non-unique --gid "${USER_GID}" spark; \
+    fi; \
+    if id spark >/dev/null 2>&1; then \
+      usermod --non-unique --uid "${USER_UID}" --gid "${USER_GID}" \
+        --home /home/spark --shell /bin/bash spark; \
+    else \
+      useradd --non-unique --uid "${USER_UID}" --gid "${USER_GID}" \
+        --home-dir /home/spark --create-home --shell /bin/bash spark; \
+    fi; \
+    install -d -o "${USER_UID}" -g "${USER_GID}" \
+      /home/spark /home/spark/.cache /home/spark/.venvs \
+      /home/spark/data /home/spark/models /home/spark/output
+
+ENV HOME=/home/spark \
+    XDG_CACHE_HOME=/home/spark/.cache
+USER spark
+
+RUN chmod +x docker/*.sh scripts/*.sh scripts/*.py \
+    && python3 -m venv --system-site-packages "${DATA_TOOLS_ENV}" \
+    && "${DATA_TOOLS_ENV}/bin/pip" install --no-cache-dir --upgrade pip \
+    && "${DATA_TOOLS_ENV}/bin/pip" install --no-cache-dir \
+         --requirement "${PIPELINE_ROOT}/dependencies/data-tools.requirements.txt" \
+    && rosbags-convert --help >/dev/null \
+    && set +u \
+    && source ${ROS_WS}/install/setup.bash \
+    && set -u \
+    && ros2 pkg prefix hydra_ros \
+    && ros2 pkg prefix khronos_ros \
+    && ros2 pkg prefix spark_3dsg_pipeline \
+    && python3 -c 'import spark_dsg'
+
+ENTRYPOINT ["/home/spark/spark-3dsg-pipeline/docker/ros_entrypoint.sh"]
+CMD ["bash"]
+
+
+# Tests and maintenance retain source, compilers, vcstool, pytest, and desktop.
+FROM core-builder AS core-development
+
+ARG USER_UID=1000
+ARG USER_GID=1000
+ENV DATA_TOOLS_ENV=/home/spark/.venvs/data-tools \
+    PATH=/home/spark/.venvs/data-tools/bin:${PATH}
 WORKDIR ${PIPELINE_ROOT}
 COPY . ${PIPELINE_ROOT}
 
 RUN chmod +x docker/*.sh scripts/*.sh scripts/*.py \
-    && python3 -c "import yaml" \
-    && bash -lc "source ${ROS_WS}/install/setup.bash && ros2 pkg prefix hydra_ros && ros2 pkg prefix khronos_ros && ros2 pkg prefix spark_3dsg_pipeline && python3 -c 'import spark_dsg'"
+    && python3 -m venv --system-site-packages "${DATA_TOOLS_ENV}" \
+    && "${DATA_TOOLS_ENV}/bin/pip" install --no-cache-dir --upgrade pip \
+    && "${DATA_TOOLS_ENV}/bin/pip" install --no-cache-dir \
+         --requirement "${PIPELINE_ROOT}/dependencies/data-tools.requirements.txt"
 
-# Keep bind-mounted model and output files owned by the invoking host user.
-# Non-unique IDs make this robust when a base image already contains UID/GID 1000.
 RUN set -eux; \
     if getent group spark >/dev/null; then \
       groupmod --non-unique --gid "${USER_GID}" spark; \
@@ -71,19 +180,24 @@ RUN set -eux; \
     fi; \
     install -d -o "${USER_UID}" -g "${USER_GID}" \
       /home/spark/.cache /home/spark/data /home/spark/models /home/spark/output; \
-    chown -R "${USER_UID}:${USER_GID}" "${ROS_WS}" "${PIPELINE_ROOT}" /home/spark
+    chown -R "${USER_UID}:${USER_GID}" "${ROS_WS}" "${PIPELINE_ROOT}" /home/spark/.venvs
 
 ENV HOME=/home/spark \
-    XDG_CACHE_HOME=/home/spark/.cache \
-    DATA_TOOLS_ENV=/home/spark/.venvs/data-tools \
-    PATH=/home/spark/.venvs/data-tools/bin:${PATH}
+    XDG_CACHE_HOME=/home/spark/.cache
 USER spark
 
-RUN python3 -m venv --system-site-packages "${DATA_TOOLS_ENV}" \
-    && "${DATA_TOOLS_ENV}/bin/pip" install --no-cache-dir --upgrade pip \
-    && "${DATA_TOOLS_ENV}/bin/pip" install --no-cache-dir \
-         --requirement "${PIPELINE_ROOT}/dependencies/data-tools.requirements.txt" \
-    && rosbags-convert --help >/dev/null
+ENTRYPOINT ["/home/spark/spark-3dsg-pipeline/docker/ros_entrypoint.sh"]
+CMD ["bash"]
+
+
+# RViz shares core runtime layers, not PyTorch/CUDA inference layers.
+FROM core-runtime AS rviz-runtime
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ros-jazzy-rviz2 \
+    && rm -rf /var/lib/apt/lists/*
+USER spark
 
 ENTRYPOINT ["/home/spark/spark-3dsg-pipeline/docker/ros_entrypoint.sh"]
 CMD ["bash"]

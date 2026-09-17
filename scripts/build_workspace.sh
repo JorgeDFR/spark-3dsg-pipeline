@@ -10,14 +10,21 @@ source /opt/ros/jazzy/setup.bash
 set -u
 cd "$workspace"
 
-colcon build \
+colcon_args=(
   --merge-install \
-  --symlink-install \
   --event-handlers console_cohesion+ \
   --cmake-args \
     --no-warn-unused-cli \
+    "-DBUILD_TESTING=${SPARK_BUILD_TESTING:-OFF}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCONFIG_UTILS_ENABLE_ROS=OFF \
     -DGTSAM_USE_SYSTEM_EIGEN=ON \
     -DSPARK_DSG_BUILD_EXAMPLES=OFF \
     -DSPARK_DSG_BUILD_PYTHON=ON
+)
+
+if [[ "${SPARK_SYMLINK_INSTALL:-OFF}" == ON ]]; then
+  colcon_args=(--symlink-install "${colcon_args[@]}")
+fi
+
+colcon build "${colcon_args[@]}"
