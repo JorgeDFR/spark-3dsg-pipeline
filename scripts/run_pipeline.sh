@@ -170,24 +170,32 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-ros2 launch spark_3dsg_pipeline pipeline.launch.yaml \
-  use_sim_time:=true \
-  start_closed_set:="$start_closed_set" \
-  start_open_set:="$start_open_set" \
-  output_dir:="$run_dir/upstream" \
-  map_frame:="$map_frame" \
-  odom_frame:="$odom_frame" \
-  robot_frame:="$robot_frame" \
-  sensor_frame:="$sensor_frame" \
-  hydra_config_path:="$hydra_config" \
-  labelspace_config_path:="$labelspace_config" \
-  semantic_pipeline_config_path:="$semantic_pipeline_config" \
-  perception_config_path:="$perception_config" \
-  model_file:="$model_file" \
-  model_config_path:="$model_config" \
-  grouping_config_path:="$grouping_config" \
-  labelspace_name:="$labelspace_name" \
-  exit_after_clock:=true \
+launch_args=(
+  "use_sim_time:=true"
+  "start_closed_set:=$start_closed_set"
+  "start_open_set:=$start_open_set"
+  "output_dir:=$run_dir/upstream"
+  "map_frame:=$map_frame"
+  "odom_frame:=$odom_frame"
+  "robot_frame:=$robot_frame"
+  "sensor_frame:=$sensor_frame"
+  "hydra_config_path:=$hydra_config"
+  "labelspace_config_path:=$labelspace_config"
+  "semantic_pipeline_config_path:=$semantic_pipeline_config"
+  "exit_after_clock:=true"
+)
+if [[ "$semantics_source" == closed_set ]]; then
+  launch_args+=(
+    "model_file:=$model_file"
+    "model_config_path:=$model_config"
+    "grouping_config_path:=$grouping_config"
+    "labelspace_name:=$labelspace_name"
+  )
+elif [[ "$semantics_source" == open_set ]]; then
+  launch_args+=("perception_config_path:=$perception_config")
+fi
+
+ros2 launch spark_3dsg_pipeline pipeline.launch.yaml "${launch_args[@]}" \
   >"$run_dir/logs/pipeline.log" 2>&1 &
 pipeline_pid=$!
 

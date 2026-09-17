@@ -13,11 +13,10 @@ make inspect DSG=/home/spark/output/run/dsg.json \
 ```
 
 Use `make dev-shell` for the complete compiler environment, pytest, or upstream
-source access. The normal `core` and `gpu` shells exclude project source and
-workspace build trees. When diagnosing image size on a Docker-capable host,
-compare the final targets with `docker image ls` and inspect retained layers
-with `docker history`; builder image size is not representative of deployed
-runtime size.
+source access. The normal `core` and `gpu` shells contain the same source and
+build trees as their images, so build failures can be reproduced in place.
+Image size is deliberately secondary; use `docker image ls` or `docker history`
+only when disk use itself is the issue.
 
 For file visualization, a missing path fails before launch and malformed JSON
 returns nonzero with a parse explanation. When given `dsg.json`, the wrapper

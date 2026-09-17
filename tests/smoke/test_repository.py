@@ -267,6 +267,10 @@ def test_non_root_runtime_and_artifact_ignores_remain():
     gpu = (ROOT / "docker/Dockerfile.gpu").read_text(encoding="utf-8")
     assert "USER spark" in core
     assert gpu.count("USER spark") >= 1
+    for dockerfile in (core, gpu):
+        assert "/home/spark /home/spark/.cache /home/spark/.ros" in dockerfile
+        assert "ENV HOME=/home/spark" in dockerfile
+        assert 'test -w "${HOME}" && test -w "${HOME}/.ros"' in dockerfile
     compose = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
     assert compose["x-common"]["working_dir"] == "/home/spark/spark-3dsg-pipeline"
     for suffix in ("*.pt", "*.bag", "*.db3", "*.mcap", "*.ply"):
@@ -274,48 +278,57 @@ def test_non_root_runtime_and_artifact_ignores_remain():
         assert suffix in (ROOT / ".dockerignore").read_text()
 
 
-def test_release_images_use_separate_builder_and_runtime_stages():
+def test_pipeline_omits_unused_perception_launch_arguments():
+    script = (ROOT / "scripts/run_pipeline.sh").read_text(encoding="utf-8")
+    common, selected = script.split(
+        'if [[ "$semantics_source" == closed_set ]]; then\n  launch_args+=(', 1
+    )
+    closed_set, open_set = selected.split(
+        'elif [[ "$semantics_source" == open_set ]]; then', 1
+    )
+
+    assert "launch_args=(" in common
+    assert "perception_config_path" not in common.split("launch_args=(", 1)[1]
+    for name in (
+        "model_file",
+        "model_config_path",
+        "grouping_config_path",
+        "labelspace_name",
+    ):
+        assert f'"{name}:=$' in closed_set
+    assert "perception_config_path:=$perception_config" in open_set
+    assert 'pipeline.launch.yaml "${launch_args[@]}"' in open_set
+
+
+def test_images_are_complete_single_stage_and_gpu_is_standalone():
     core = (ROOT / "docker/Dockerfile.core").read_text(encoding="utf-8")
     gpu = (ROOT / "docker/Dockerfile.gpu").read_text(encoding="utf-8")
     build_script = (ROOT / "scripts/build_workspace.sh").read_text(
         encoding="utf-8"
     )
 
-    assert "AS core-builder" in core
-    assert "AS core-runtime" in core
-    assert "AS core-development" in core
-    assert "AS rviz-runtime" in core
-    assert "ARG ROS_RUNTIME_IMAGE=ros:jazzy-ros-base" in core
-    assert "osrf/ros:jazzy-ros-base" not in core
-    assert "--from=core-builder" in core
-    assert "${ROS_WS}/install ${ROS_WS}/install" in core
-    assert "COPY --chown=${USER_UID}:${USER_GID}" in core
-    assert "--dependency-types exec" in core
-    assert "apt-get purge" not in core
-    runtime = core.split("AS core-runtime", 1)[1].split(
-        "AS core-development", 1
-    )[0]
-    assert "source /opt/ros/${ROS_DISTRO}/setup.bash" in runtime
-    assert "command -v ros2" in runtime
-    assert runtime.index("source /opt/ros/${ROS_DISTRO}/setup.bash") < runtime.index(
-        "source ${ROS_WS}/install/setup.bash"
-    )
-    assert "SPARK_SYMLINK_INSTALL=OFF" in core
+    assert "ARG ROS_IMAGE=osrf/ros:jazzy-desktop-full" in core
+    assert sum(line.startswith("FROM ") for line in core.splitlines()) == 1
+    assert sum(line.startswith("FROM ") for line in gpu.splitlines()) == 1
+    assert "--from=" not in core
+    assert "--from=" not in gpu
+    assert "spark-3dsg-core" not in gpu
+    assert "ARG CUDA_IMAGE=nvidia/cuda:12.8.1-devel-ubuntu24.04" in gpu
+    assert "ros-jazzy-desktop" in gpu
+    assert "python3-vcstool" in core
+    assert "python3-vcstool" in gpu
+    assert "COPY . ${PIPELINE_ROOT}" in core
+    assert "COPY . ${PIPELINE_ROOT}" in gpu
+    assert "SPARK_SYMLINK_INSTALL=ON" in core
+    assert "SPARK_SYMLINK_INSTALL=ON" in gpu
     assert "-DBUILD_TESTING=${SPARK_BUILD_TESTING:-OFF}" in build_script
-    assert "--symlink-install" not in build_script.split("colcon_args=(", 1)[1].split(")", 1)[0]
-
-    assert "AS gpu-builder" in gpu
-    assert "AS gpu-runtime" in gpu
-    assert "COPY --chown=spark:spark --from=gpu-builder" in gpu
-    assert "/home/spark/ros_ws/install /home/spark/ros_ws/install" in gpu
-    assert "/home/spark/.venvs/semantic_inference /home/spark/.venvs/semantic_inference" in gpu
-    assert "chown -R spark:spark" not in gpu
-    runtime = gpu.split("AS gpu-runtime", 1)[1]
-    assert "cuda-nvcc" not in runtime
-    assert "libnvinfer-dev" not in runtime
+    assert (
+        '"-DSEMANTIC_INFERENCE_USE_TRT='
+        '${SPARK_SEMANTIC_INFERENCE_USE_TRT:-OFF}"'
+    ) in build_script
 
 
-def test_gpu_stack_is_exact_and_runtime_python_is_self_contained():
+def test_gpu_stack_is_exact_and_python_is_self_contained():
     gpu = (ROOT / "docker/Dockerfile.gpu").read_text(encoding="utf-8")
     requirements = (ROOT / "dependencies/gpu.requirements.txt").read_text(
         encoding="utf-8"
@@ -323,32 +336,13 @@ def test_gpu_stack_is_exact_and_runtime_python_is_self_contained():
     baseline = (ROOT / "dependencies/GPU_BASELINE.md").read_text(encoding="utf-8")
 
     expected = {
-        "ARG CUDA_CUDART_VERSION=12.8.90-1",
-        "ARG CUDA_NVCC_VERSION=12.8.93-1",
+        "ARG CUDA_IMAGE=nvidia/cuda:12.8.1-devel-ubuntu24.04",
         "ARG TENSORRT_VERSION=10.9.0.34-1+cuda12.8",
         "ARG TORCH_VERSION=2.7.0",
         "ARG TORCHVISION_VERSION=0.22.0",
         "ARG PYTORCH_INDEX=https://download.pytorch.org/whl/cu128",
     }
     assert expected <= set(gpu.splitlines())
-    assert "apt-cache policy libnvinfer-dev" not in gpu
-    assert "Candidate:" not in gpu
-    for package in (
-        "cuda-toolkit-config-common",
-        "cuda-toolkit-12-config-common",
-        "cuda-toolkit-${CUDA_SERIES}-config-common",
-        "cuda-cccl-${CUDA_SERIES}",
-        "cuda-cudart-${CUDA_SERIES}",
-        "cuda-cudart-dev-${CUDA_SERIES}",
-        "cuda-driver-dev-${CUDA_SERIES}",
-    ):
-        assert f'"{package}=${{CUDA_CUDART_VERSION}}"' in gpu
-    for package in (
-        "cuda-crt-${CUDA_SERIES}",
-        "cuda-nvvm-${CUDA_SERIES}",
-        "cuda-nvcc-${CUDA_SERIES}",
-    ):
-        assert f'"{package}=${{CUDA_NVCC_VERSION}}"' in gpu
     for package in (
         "libnvinfer-headers-dev",
         "libnvinfer-headers-plugin-dev",
@@ -362,7 +356,17 @@ def test_gpu_stack_is_exact_and_runtime_python_is_self_contained():
         assert f'"{package}=${{TENSORRT_VERSION}}"' in gpu
     assert 'python3 -m venv "${SEMANTIC_ENV}"' in gpu
     assert 'venv --system-site-packages "${SEMANTIC_ENV}"' not in gpu
-    assert "import PIL, rclpy, semantic_inference" in gpu
+    assert "import PIL, rclpy, semantic_inference, spark_dsg" in gpu
+    assert "SPARK_SEMANTIC_INFERENCE_USE_TRT=ON" in gpu
+    assert "nvcc --version | grep -F 'release 12.8'" in gpu
+    assert "grep -F 'libnvinfer.so.10 =>'" in gpu
+    assert "grep -F 'not found'" in gpu
+    validation = gpu.split("SPARK_SEMANTIC_INFERENCE_USE_TRT=ON", 1)[1].split(
+        "WORKDIR ${PIPELINE_ROOT}", 1
+    )[0]
+    assert validation.index("source ${ROS_WS}/install/setup.bash") < validation.index(
+        "ldd ${ROS_WS}/install/lib/libsemantic_inference.so"
+    )
     assert "pillow==11.3.0" in requirements
     assert "driver 580.173.02" in baseline
     assert "CUDA 13.0" in baseline
@@ -372,23 +376,30 @@ def test_gpu_stack_is_exact_and_runtime_python_is_self_contained():
     assert "scripts/gpu_smoke_test.sh" in makefile
 
 
-def test_compose_uses_slim_runtime_dev_and_rviz_targets():
+def test_compose_reuses_core_image_and_builds_gpu_independently():
     compose = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
-    targets = {
-        "core-builder": "core-builder",
-        "core": "core-runtime",
-        "core-dev": "core-development",
-        "pipeline": "gpu-runtime",
-        "data-setup": "core-runtime",
-        "rviz": "rviz-runtime",
-    }
-    for service, target in targets.items():
-        assert compose["services"][service]["build"]["target"] == target
-
-    assert compose["services"]["rviz"]["image"] == "spark-3dsg-rviz:local"
+    assert "core-builder" not in compose["services"]
+    for service in ("core", "core-dev", "data-setup", "rviz"):
+        assert compose["services"][service]["image"] == "spark-3dsg-core:local"
+        assert "target" not in compose["services"][service]["build"]
+    assert compose["services"]["pipeline"]["image"] == "spark-3dsg-gpu:local"
+    assert compose["services"]["pipeline"]["build"]["dockerfile"] == (
+        "docker/Dockerfile.gpu"
+    )
+    assert "target" not in compose["services"]["pipeline"]["build"]
     assert "gpus" not in compose["services"]["rviz"]
     assert compose["services"]["pipeline"]["gpus"] == "all"
+    assert (
+        "${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:"
+        "/home/spark/ros_ws/src/spark_3dsg_pipeline:ro"
+    ) in compose["x-common"]["volumes"]
 
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     assert "--profile dev run --rm --build core-dev" in makefile
-    assert "--profile rviz run --rm --build rviz" in makefile
+    assert "--profile rviz run --rm rviz" in makefile
+    build_target = makefile.split("build: ##", 1)[1].split("models: ##", 1)[0]
+    gpu_build = build_target.split("else ifeq ($(PROFILE),gpu)", 1)[1].split(
+        "endif", 1
+    )[0]
+    assert "build pipeline" in gpu_build
+    assert "build core" not in gpu_build

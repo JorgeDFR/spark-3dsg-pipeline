@@ -1,149 +1,167 @@
 # syntax=docker/dockerfile:1.7
 
-ARG CORE_BUILDER_IMAGE=spark-3dsg-core-builder:local
-ARG CORE_RUNTIME_IMAGE=spark-3dsg-core:local
+# ROS 2 Jazzy requires Ubuntu 24.04. The official PyTorch 2.7/CUDA 12.8 image
+# uses Ubuntu 22.04, so use NVIDIA's matching devel image and install the
+# official PyTorch cu128 wheels instead. CUDA and NVCC come from the base image.
+ARG CUDA_IMAGE=nvidia/cuda:12.8.1-devel-ubuntu24.04
+FROM ${CUDA_IMAGE}
 
-# Keep this compatibility set together. See dependencies/GPU_BASELINE.md.
-# CUDA 12.8 is the first PyTorch wheel family with Blackwell support and is the
-# stack used by the pinned Awesome-DCIST-T4 reference.
-ARG CUDA_SERIES=12-8
-ARG CUDA_CUDART_VERSION=12.8.90-1
-ARG CUDA_NVCC_VERSION=12.8.93-1
+ARG DEBIAN_FRONTEND=noninteractive
+ARG USER_UID=1000
+ARG USER_GID=1000
 ARG TENSORRT_VERSION=10.9.0.34-1+cuda12.8
 ARG TORCH_VERSION=2.7.0
 ARG TORCHVISION_VERSION=0.22.0
 ARG PYTORCH_INDEX=https://download.pytorch.org/whl/cu128
 
-# CUDA compilers, TensorRT headers, and upstream source exist only here.
-FROM ${CORE_BUILDER_IMAGE} AS gpu-builder
-
-ARG CUDA_SERIES
-ARG CUDA_CUDART_VERSION
-ARG CUDA_NVCC_VERSION
-ARG TENSORRT_VERSION
-ARG TORCH_VERSION
-ARG TORCHVISION_VERSION
-ARG PYTORCH_INDEX
-
-ENV SEMANTIC_ENV=/home/spark/.venvs/semantic_inference \
+ENV ROS_DISTRO=jazzy \
+    ROS_WS=/home/spark/ros_ws \
+    PIPELINE_ROOT=/home/spark/spark-3dsg-pipeline \
+    SEMANTIC_ENV=/home/spark/.venvs/semantic_inference \
     SEMANTIC_INFERENCE_MODEL_DIR=/home/spark/models/semantic_inference \
-    CUDA_HOME=/usr/local/cuda-12.8 \
-    PATH=/home/spark/.venvs/semantic_inference/bin:/usr/local/cuda-12.8/bin:${PATH}
+    CUDA_HOME=/usr/local/cuda \
+    PYTHONUNBUFFERED=1 \
+    PATH=/home/spark/.venvs/semantic_inference/bin:/usr/local/cuda/bin:${PATH}
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN curl --fail --location --output /tmp/cuda-keyring.deb \
-      https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
-    && dpkg -i /tmp/cuda-keyring.deb \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-         "cuda-toolkit-config-common=${CUDA_CUDART_VERSION}" \
-         "cuda-toolkit-12-config-common=${CUDA_CUDART_VERSION}" \
-         "cuda-toolkit-${CUDA_SERIES}-config-common=${CUDA_CUDART_VERSION}" \
-         "cuda-cccl-${CUDA_SERIES}=${CUDA_CUDART_VERSION}" \
-         "cuda-cudart-${CUDA_SERIES}=${CUDA_CUDART_VERSION}" \
-         "cuda-cudart-dev-${CUDA_SERIES}=${CUDA_CUDART_VERSION}" \
-         "cuda-driver-dev-${CUDA_SERIES}=${CUDA_CUDART_VERSION}" \
-         "cuda-crt-${CUDA_SERIES}=${CUDA_NVCC_VERSION}" \
-         "cuda-nvvm-${CUDA_SERIES}=${CUDA_NVCC_VERSION}" \
-         "cuda-nvcc-${CUDA_SERIES}=${CUDA_NVCC_VERSION}" \
-         "libnvinfer-headers-dev=${TENSORRT_VERSION}" \
-         "libnvinfer-headers-plugin-dev=${TENSORRT_VERSION}" \
-         "libnvinfer10=${TENSORRT_VERSION}" \
-         "libnvinfer-dev=${TENSORRT_VERSION}" \
-         "libnvinfer-plugin10=${TENSORRT_VERSION}" \
-         "libnvinfer-plugin-dev=${TENSORRT_VERSION}" \
-         "libnvonnxparsers10=${TENSORRT_VERSION}" \
-         "libnvonnxparsers-dev=${TENSORRT_VERSION}" \
-    && test "$(dpkg-query -W -f='${Version}' "cuda-nvcc-${CUDA_SERIES}")" = "${CUDA_NVCC_VERSION}" \
-    && test "$(dpkg-query -W -f='${Version}' libnvinfer-dev)" = "${TENSORRT_VERSION}" \
-    && /usr/local/cuda-12.8/bin/nvcc --version | grep -F 'release 12.8' \
-    && rm -rf /var/lib/apt/lists/* /tmp/cuda-keyring.deb
+# Install ROS directly on the Ubuntu 24.04 CUDA image, following the same model
+# as the MIT-SPARK development containers. The base already supplies the CUDA
+# compiler and runtime, so no CUDA package reconstruction is needed here.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      gnupg2 \
+      locales \
+      lsb-release \
+      software-properties-common \
+    && locale-gen en_US en_US.UTF-8 \
+    && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 \
+    && curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+         -o /usr/share/keyrings/ros-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu noble main" \
+         > /etc/apt/sources.list.d/ros2.list \
+    && rm -rf /var/lib/apt/lists/*
 
+ENV LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential \
+      git \
+      libcli11-dev \
+      libeigen3-dev \
+      libgoogle-glog-dev \
+      libzmq3-dev \
+      nlohmann-json3-dev \
+      pipx \
+      python3-pip \
+      python3-pytest \
+      python3-venv \
+      python3-vcstool \
+      python3-yaml \
+      ros-dev-tools \
+      ros-jazzy-desktop \
+      ros-jazzy-rmw-fastrtps-cpp \
+      ros-jazzy-rosbag2-storage-mcap \
+      "libnvinfer-headers-dev=${TENSORRT_VERSION}" \
+      "libnvinfer-headers-plugin-dev=${TENSORRT_VERSION}" \
+      "libnvinfer10=${TENSORRT_VERSION}" \
+      "libnvinfer-dev=${TENSORRT_VERSION}" \
+      "libnvinfer-plugin10=${TENSORRT_VERSION}" \
+      "libnvinfer-plugin-dev=${TENSORRT_VERSION}" \
+      "libnvonnxparsers10=${TENSORRT_VERSION}" \
+      "libnvonnxparsers-dev=${TENSORRT_VERSION}" \
+    && test "$(dpkg-query -W -f='${Version}' libnvinfer-dev)" = \
+         "${TENSORRT_VERSION}" \
+    && nvcc --version | grep -F 'release 12.8' \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN rosdep init 2>/dev/null || true \
+    && rosdep update --rosdistro ${ROS_DISTRO}
+
+WORKDIR ${ROS_WS}
+COPY dependencies/locks/v1.lock.repos /tmp/v1.lock.repos
+COPY scripts/bootstrap_dependencies.sh /tmp/bootstrap_dependencies.sh
+RUN /tmp/bootstrap_dependencies.sh ${ROS_WS}/src /tmp/v1.lock.repos
+
+COPY src/spark_3dsg_pipeline src/spark_3dsg_pipeline
+RUN apt-get update \
+    && rosdep install --from-paths src --ignore-src -r -y \
+         --rosdistro ${ROS_DISTRO} \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY scripts/build_workspace.sh /tmp/build_workspace.sh
+RUN SPARK_BUILD_TESTING=OFF SPARK_SYMLINK_INSTALL=ON \
+    SPARK_SEMANTIC_INFERENCE_USE_TRT=ON \
+    /tmp/build_workspace.sh ${ROS_WS}
+
+# Keep validation separate so a failed assertion does not discard the costly
+# workspace build layer.
 RUN set +u \
-    && source /opt/ros/jazzy/setup.bash \
-    && source /home/spark/ros_ws/install/setup.bash \
+    && source /opt/ros/${ROS_DISTRO}/setup.bash \
+    && source ${ROS_WS}/install/setup.bash \
     && set -u \
-    && cd /home/spark/ros_ws \
-    && colcon build --merge-install \
-         --packages-select semantic_inference semantic_inference_ros \
-         --cmake-force-configure \
-         --cmake-args \
-           -DBUILD_TESTING=OFF \
-           -DCMAKE_BUILD_TYPE=Release \
-           -DCUDAToolkit_ROOT=/usr/local/cuda-12.8 \
-           -DSEMANTIC_INFERENCE_USE_TRT=ON
+    && test -f ${ROS_WS}/install/lib/libsemantic_inference.so \
+    && ldd ${ROS_WS}/install/lib/libsemantic_inference.so \
+         | grep -F 'libnvinfer.so.10 =>' \
+    && ! ldd ${ROS_WS}/install/lib/libsemantic_inference.so \
+         | grep -F 'not found'
 
-# Do not expose builder system packages to this environment. Otherwise pip can
-# accept (for example) the builder's apt Pillow as satisfying Ultralytics, then
-# leave it out of the venv copied into the smaller runtime image.
+WORKDIR ${PIPELINE_ROOT}
+COPY . ${PIPELINE_ROOT}
+
+# A single isolated environment holds both data tools and inference packages.
+# BuildKit retains downloaded wheels between rebuilds without adding them to the
+# final image layer.
 RUN --mount=type=cache,target=/root/.cache/pip \
     python3 -m venv "${SEMANTIC_ENV}" \
     && "${SEMANTIC_ENV}/bin/pip" install --upgrade pip \
     && "${SEMANTIC_ENV}/bin/pip" install \
-         torch==${TORCH_VERSION} torchvision==${TORCHVISION_VERSION} --index-url ${PYTORCH_INDEX}
-
-COPY dependencies/gpu.requirements.txt /tmp/gpu.requirements.txt
-RUN --mount=type=cache,target=/root/.cache/pip \
-    "${SEMANTIC_ENV}/bin/pip" install --no-deps \
-         /home/spark/ros_ws/src/spark_config \
+         torch==${TORCH_VERSION} torchvision==${TORCHVISION_VERSION} \
+         --index-url ${PYTORCH_INDEX} \
+    && "${SEMANTIC_ENV}/bin/pip" install --no-deps \
+         ${ROS_WS}/src/spark_config \
     && "${SEMANTIC_ENV}/bin/pip" install \
-         --requirement /tmp/gpu.requirements.txt \
-    && "${SEMANTIC_ENV}/bin/pip" install \
-         --no-deps /home/spark/ros_ws/src/semantic_inference/semantic_inference \
+         --requirement dependencies/gpu.requirements.txt \
+    && "${SEMANTIC_ENV}/bin/pip" install --no-deps \
+         ${ROS_WS}/src/semantic_inference/semantic_inference \
     && "${SEMANTIC_ENV}/bin/pip" check \
-    && "${SEMANTIC_ENV}/bin/python" -c \
-         "import PIL, semantic_inference, torch, torchvision, ultralytics; assert torch.__version__.split('+')[0] == '${TORCH_VERSION}'; assert torchvision.__version__.split('+')[0] == '${TORCHVISION_VERSION}'; assert torch.version.cuda == '12.8'"
-
-
-# Final GPU runtime contains neither NVCC, development headers, source nor build.
-FROM ${CORE_RUNTIME_IMAGE} AS gpu-runtime
-
-ARG DEBIAN_FRONTEND=noninteractive
-ARG CUDA_SERIES
-ARG CUDA_CUDART_VERSION
-ARG TENSORRT_VERSION
-ARG TORCH_VERSION
-ARG TORCHVISION_VERSION
-ENV SEMANTIC_ENV=/home/spark/.venvs/semantic_inference \
-    SEMANTIC_INFERENCE_MODEL_DIR=/home/spark/models/semantic_inference \
-    PATH=/home/spark/.venvs/semantic_inference/bin:${PATH}
-
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-USER root
-
-RUN curl --fail --location --output /tmp/cuda-keyring.deb \
-      https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
-    && dpkg -i /tmp/cuda-keyring.deb \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-         "cuda-toolkit-config-common=${CUDA_CUDART_VERSION}" \
-         "cuda-toolkit-12-config-common=${CUDA_CUDART_VERSION}" \
-         "cuda-toolkit-${CUDA_SERIES}-config-common=${CUDA_CUDART_VERSION}" \
-         "cuda-cudart-${CUDA_SERIES}=${CUDA_CUDART_VERSION}" \
-         "libnvinfer10=${TENSORRT_VERSION}" \
-         "libnvinfer-plugin10=${TENSORRT_VERSION}" \
-         "libnvonnxparsers10=${TENSORRT_VERSION}" \
-    && test "$(dpkg-query -W -f='${Version}' "cuda-cudart-${CUDA_SERIES}")" = "${CUDA_CUDART_VERSION}" \
-    && test "$(dpkg-query -W -f='${Version}' libnvinfer10)" = "${TENSORRT_VERSION}" \
-    && rm -rf /var/lib/apt/lists/* /tmp/cuda-keyring.deb
-
-COPY --chown=spark:spark --from=gpu-builder \
-     /home/spark/ros_ws/install /home/spark/ros_ws/install
-COPY --chown=spark:spark --from=gpu-builder \
-     /home/spark/.venvs/semantic_inference /home/spark/.venvs/semantic_inference
-
-RUN set +u \
-    && source /opt/ros/jazzy/setup.bash \
-    && source /home/spark/ros_ws/install/setup.bash \
+    && chmod +x docker/*.sh scripts/*.sh scripts/*.py \
+    && set +u \
+    && source /opt/ros/${ROS_DISTRO}/setup.bash \
+    && source ${ROS_WS}/install/setup.bash \
     && set -u \
-    && test -f /home/spark/ros_ws/install/lib/libsemantic_inference.so \
-    && ldd /home/spark/ros_ws/install/lib/libsemantic_inference.so | grep -F 'libnvinfer.so.10 =>' \
-    && ! ldd /home/spark/ros_ws/install/lib/libsemantic_inference.so | grep -F 'not found' \
-    && /home/spark/.venvs/semantic_inference/bin/pip check \
-    && /home/spark/.venvs/semantic_inference/bin/python \
-         -c "import PIL, rclpy, semantic_inference, torch, torchvision, ultralytics; assert torch.__version__.split('+')[0] == '${TORCH_VERSION}'; assert torchvision.__version__.split('+')[0] == '${TORCHVISION_VERSION}'; assert torch.version.cuda == '12.8'"
+    && ros2 pkg prefix hydra_ros \
+    && ros2 pkg prefix khronos_ros \
+    && ros2 pkg prefix semantic_inference_ros \
+    && ros2 pkg prefix spark_3dsg_pipeline \
+    && python -c \
+         "import PIL, rclpy, semantic_inference, spark_dsg, torch, torchvision, ultralytics; assert torch.__version__.split('+')[0] == '${TORCH_VERSION}'; assert torchvision.__version__.split('+')[0] == '${TORCHVISION_VERSION}'; assert torch.version.cuda == '12.8'"
 
+RUN set -eux; \
+    if getent group spark >/dev/null; then \
+      groupmod --non-unique --gid "${USER_GID}" spark; \
+    else \
+      groupadd --non-unique --gid "${USER_GID}" spark; \
+    fi; \
+    if id spark >/dev/null 2>&1; then \
+      usermod --non-unique --uid "${USER_UID}" --gid "${USER_GID}" \
+        --home /home/spark --shell /bin/bash spark; \
+    else \
+      useradd --non-unique --uid "${USER_UID}" --gid "${USER_GID}" \
+        --home-dir /home/spark --create-home --shell /bin/bash spark; \
+    fi; \
+    install -d -o "${USER_UID}" -g "${USER_GID}" \
+      /home/spark /home/spark/.cache /home/spark/.ros \
+      /home/spark/data /home/spark/models /home/spark/output; \
+    chown -R "${USER_UID}:${USER_GID}" \
+      "${ROS_WS}" "${PIPELINE_ROOT}" /home/spark/.venvs
+
+ENV HOME=/home/spark \
+    XDG_CACHE_HOME=/home/spark/.cache
 USER spark
+RUN test -w "${HOME}" && test -w "${HOME}/.ros"
+
 ENTRYPOINT ["/home/spark/spark-3dsg-pipeline/docker/ros_entrypoint.sh"]
 CMD ["bash"]

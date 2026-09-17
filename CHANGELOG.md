@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Simplify Docker to independent single-stage core and GPU images, with the GPU
+  image based directly on CUDA 12.8.1/Ubuntu 24.04 for Blackwell support.
+- Keep source and build tooling in both images, reuse one core image for CPU,
+  tests, and RViz, and restore bind-mounted symlink-install development.
 - Separate scene structure, semantic source/taxonomy, and visualization profile
   in dataset adapters, with fail-fast compatibility checks.
 - Rebuild `classic.yaml` as hierarchical Hydra reconstruction with online

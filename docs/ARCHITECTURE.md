@@ -48,29 +48,32 @@ It does not modify upstream source.
 
 ## Container architecture
 
-Release builds use independent builder and runtime stages:
+The repository builds two independent images:
 
 ```text
-core-builder (desktop + toolchain + exact-SHA source)
-  |-- core-development (tests and maintenance only)
-  `-- self-contained ROS install --> core-runtime (ROS Base)
-                                      |-- gpu-runtime
-                                      `-- rviz-runtime
+osrf/ros:jazzy-desktop-full                 nvidia/cuda:12.8.1-devel-ubuntu24.04
+             |                                              |
+     core (CPU + RViz + tests)                  gpu (ROS + TensorRT + PyTorch)
 ```
 
-The release ROS workspace is built without `--symlink-install`, allowing only
-its install space to be copied into runtime images. Runtime apt dependencies are
-resolved from the builder source through a temporary BuildKit mount. The GPU
-builder adds NVCC and TensorRT headers, but the final image receives only the
-TensorRT runtime packages, rebuilt ROS install, and semantic-inference virtual
-environment. CUDA, TensorRT, PyTorch, torchvision, and cuDNN form the qualified
-set documented in [`dependencies/GPU_BASELINE.md`](../dependencies/GPU_BASELINE.md).
-RViz is kept separate from GPU inference.
+Both are single-stage, complete environments. They retain the compiler,
+exact-SHA upstream source, build tree, and merged/symlinked install space. This
+uses more disk than a minimal deployment image, but removes cross-stage artifact
+copying, runtime dependency reconstruction, and the requirement to prebuild
+locally tagged parent images. The GPU image is independently buildable and does
+not inherit from `spark-3dsg-core:local`.
 
-`core-runtime`, `gpu-runtime`, and `rviz-runtime` run as the non-root `spark`
-user. `core-development` retains the complete upstream source and workspace
-build trees and is used by `make test`, `make lint`, `make lock-dependencies`,
-and `make dev-shell`.
+The official PyTorch 2.7/CUDA 12.8 images use Ubuntu 22.04 and Conda, which are
+not compatible base assumptions for ROS 2 Jazzy's Ubuntu 24.04 binary packages.
+The GPU image therefore starts from NVIDIA's Ubuntu 24.04 CUDA development image
+and installs the official PyTorch `cu128` wheels in one virtual environment.
+CUDA, TensorRT, PyTorch, torchvision, and cuDNN form the qualified set documented
+in [`dependencies/GPU_BASELINE.md`](../dependencies/GPU_BASELINE.md).
+
+Every service runs as the host-matched, non-root `spark` user. Core mapping,
+RViz, tests, maintenance, and the development shell reuse the same core image.
+The integration package is symlink-installed and bind-mounted so resource and
+Python edits are visible without an image rebuild.
 
 ## Reproducibility
 

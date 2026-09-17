@@ -75,9 +75,14 @@ visualizer_config="$package_share/config/visualization/$profile.yaml"
   exit 2
 }
 
-exec ros2 launch spark_3dsg_pipeline visualization.launch.yaml \
-  map_frame:="$map_frame" \
-  use_sim_time:="$use_sim_time" \
-  visualizer_config_path:="$visualizer_config" \
-  file_mode:="$file_mode" \
-  scene_graph:="$dsg"
+launch_args=(
+  "map_frame:=$map_frame"
+  "use_sim_time:=$use_sim_time"
+  "visualizer_config_path:=$visualizer_config"
+  "file_mode:=$file_mode"
+)
+if [[ "$file_mode" == true ]]; then
+  launch_args+=("scene_graph:=$dsg")
+fi
+
+exec ros2 launch spark_3dsg_pipeline visualization.launch.yaml "${launch_args[@]}"

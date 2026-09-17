@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -21,8 +22,9 @@ fi
     )
     binary.chmod(0o755)
     env = os.environ.copy()
-    env["PATH"] = f"{tmp_path}:{env['PATH']}"
+    env["PATH"] = f"{tmp_path}:{Path(sys.executable).parent}:{env['PATH']}"
     env["FAKE_PACKAGE_SHARE"] = str(ROOT / "src/spark_3dsg_pipeline")
+    env["PIPELINE_ROOT"] = str(ROOT)
     return env
 
 
@@ -34,6 +36,18 @@ def test_saved_visualization_reports_missing_json_before_ros(tmp_path):
     )
     assert result.returncode == 2
     assert "DSG JSON not found" in result.stderr
+
+
+def test_live_visualization_omits_empty_scene_graph_argument(tmp_path):
+    result = subprocess.run(
+        [str(WRAPPER), "--dataset", "spot"],
+        capture_output=True,
+        text=True,
+        env=fake_ros_environment(tmp_path),
+    )
+    assert result.returncode == 0
+    assert "file_mode:=false" in result.stdout
+    assert "scene_graph:=" not in result.stdout
 
 
 def test_saved_visualization_reports_invalid_json_before_ros(tmp_path):

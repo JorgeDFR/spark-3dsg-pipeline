@@ -33,12 +33,8 @@ config: ## Validate the resolved Compose configuration
 build: ## Build the exact-SHA v1 snapshot with PROFILE=core|gpu
 ifeq ($(PROFILE),core)
 	@$(COMPOSE) --profile core build core
-	@$(COMPOSE) --profile rviz build rviz
 else ifeq ($(PROFILE),gpu)
-	@$(COMPOSE) --profile core build core
-	@$(COMPOSE) --profile build build core-builder
 	@$(COMPOSE) --profile gpu build pipeline
-	@$(COMPOSE) --profile rviz build rviz
 endif
 
 models: ## Download/checksum closed-set and YOLOE weights into the model mount
@@ -67,7 +63,7 @@ inspect: ## Inspect DSG=/home/spark/output/.../dsg.json
 	@$(COMPOSE) --profile core run --rm core python3 $(PIPELINE_ROOT)/scripts/inspect_dsg.py "$(DSG)" $(INSPECT_ARGS)
 
 rviz: ## Visualize live or DSG=...; optionally set VISUALIZATION_PROFILE=...
-	@$(COMPOSE) --profile rviz run --rm --build rviz \
+	@$(COMPOSE) --profile rviz run --rm rviz \
 		$(PIPELINE_ROOT)/scripts/run_visualization.sh \
 		$(if $(VISUALIZATION_PROFILE),,--dataset "$(DATASET)") \
 		$(if $(VISUALIZATION_PROFILE),--profile "$(VISUALIZATION_PROFILE)",) \

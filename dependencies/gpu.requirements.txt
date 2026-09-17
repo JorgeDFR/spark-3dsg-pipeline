@@ -1,6 +1,6 @@
 # Direct Python requirements captured 2026-08-27. Torch/torchvision are installed
 # separately from the CUDA 12.8 wheel index in Dockerfile.gpu. Pillow is
-# explicit because the slim runtime must not inherit the builder's apt package.
+# explicit so the isolated inference environment is self-contained.
 click==8.5.0
 distinctipy==1.3.4
 einops==0.8.2

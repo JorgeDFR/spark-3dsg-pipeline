@@ -37,13 +37,18 @@ make models PROFILE=gpu
 `make models` downloads and checksums both the closed-set ONNX model and YOLOE
 weights into the mounted model directory. See [model setup](docs/MODELS.md).
 
-The Docker build is multi-stage. Mapping uses a ROS Base runtime with only the
-resolved `exec` dependencies and a self-contained ROS install space. Compilers,
-upstream source, workspace build trees, tests, CUDA NVCC, and TensorRT headers
-added by this project stay in builder/development targets. RViz is a separate
-image and does not inherit the GPU inference environment. Use `make dev-shell`
-when upstream source or the complete project build environment is needed;
-package/launch/configuration changes require rebuilding a runtime image.
+There are two independent, single-stage images. `core` starts from the ROS 2
+Jazzy desktop image. `gpu` starts from NVIDIA CUDA 12.8.1 on Ubuntu 24.04 and
+installs Jazzy, TensorRT, and the official PyTorch `cu128` wheels. Each image
+keeps its compiler, exact-SHA upstream source, and workspace build tree so a
+failed build can be inspected directly. This intentionally favors a short,
+cache-friendly build and straightforward debugging over minimum image size.
+
+The expensive upstream checkout is cached from the dependency lock before the
+local integration package is copied. The integration package is symlink-built
+and bind-mounted, so launch, YAML, and Python changes do not require rebuilding
+the image. `make build PROFILE=gpu` builds only the standalone GPU image; it no
+longer depends on separately tagged core builder/runtime images.
 
 ## Mapping examples
 
@@ -51,11 +56,11 @@ package/launch/configuration changes require rebuilding a runtime image.
 # Recorded uHumans2 semantics; no inference node.
 make run PROFILE=core DATASET=uhumans2 BAG=/home/spark/data/uhumans2
 
-# Generic hierarchical mapping with ADE20K closed-set inference.
-make run PROFILE=gpu DATASET=custom_rgbd BAG=/home/spark/data/my_rgbd
-
 # ADT4/Spot Khronos example with the default open-set taxonomy.
 make run PROFILE=gpu DATASET=spot BAG=/home/spark/data/spot
+
+# Generic hierarchical mapping with ADE20K closed-set inference.
+make run PROFILE=gpu DATASET=custom_rgbd BAG=/home/spark/data/my_rgbd
 
 # Same mapper and model settings, different YOLOE taxonomy.
 make run PROFILE=gpu DATASET=spot BAG=/home/spark/data/spot \
@@ -80,11 +85,11 @@ immutable upstream snapshot in `dependencies/locks/v1.lock.repos`.
 
 ```bash
 # Live graph, profile selected by the dataset adapter.
-make rviz DATASET=spot
+make rviz DATASET=uhumans2
 
 # Saved graph, profile selected by the adapter. If dsg.json is supplied, the
 # wrapper automatically uses its dsg_with_mesh.json sibling when present.
-make rviz DATASET=spot DSG=/home/spark/output/run/dsg_with_mesh.json
+make rviz DATASET=uhumans2 DSG=/home/spark/output/run/dsg_with_mesh.json
 
 # Saved graph without a dataset adapter.
 make rviz DSG=/home/spark/output/run/dsg_with_mesh.json \
@@ -110,11 +115,10 @@ make test PROFILE=core
 make lint PROFILE=core
 ```
 
-These targets build and use the development image automatically; they do not
-add test tools to mapping images. Repository-only tests may also run from the
-ignored `.venv`. GPU/runtime smoke tests are described in
-[debugging](docs/DEBUGGING.md). Model, bag, mesh, and output artifacts remain
-untracked.
+These targets use the same complete core image used for CPU mapping. Repository-
+only tests may also run from the ignored `.venv`. GPU/runtime smoke tests are
+described in [debugging](docs/DEBUGGING.md). Model, bag, mesh, and output
+artifacts remain untracked.
 
 Further detail: [architecture](docs/ARCHITECTURE.md), [datasets](docs/DATASETS.md),
 [input contract](docs/INPUT_CONTRACT.md), and
