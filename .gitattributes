@@ -1,0 +1,2 @@
+# Scene-graph examples are generated JSON artifacts; suppress enormous textual diffs.
+examples/dsg/*.json -diff

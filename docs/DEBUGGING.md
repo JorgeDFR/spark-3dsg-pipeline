@@ -13,8 +13,10 @@ make inspect DSG=/home/spark/output/run/dsg.json \
 ```
 
 For file visualization, a missing path fails before launch and malformed JSON
-returns nonzero with a parse explanation. A valid file uses the same renderer as
-live streaming and does not require a mapper process.
+returns nonzero with a parse explanation. When given `dsg.json`, the wrapper
+prefers a sibling `dsg_with_mesh.json`. It warns before launch if the selected
+file has no non-empty embedded mesh. A valid file uses the same renderer as live
+streaming and does not require a mapper process.
 
 GPU smoke tests must run in Docker:
 

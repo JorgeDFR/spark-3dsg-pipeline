@@ -10,6 +10,8 @@
   closed-set/open-set perception launches.
 - Add hierarchical and Khronos renderer profiles plus native saved-DSG JSON
   visualization.
+- Export both compact and mesh-bearing DSG JSONs, warn on mesh-free offline
+  visualization, and add two mesh-bearing reference scene graphs.
 - Define `v1` solely as the immutable exact-SHA upstream snapshot, rename the
   output acceptance flag, and remove unavailable pipeline placeholders.
 - Add Docker-first core and GPU profiles.

@@ -60,7 +60,9 @@ model:
     text_prompt: [ignore, chair, mug]
 ```
 
-Outputs are written below `/home/spark/output`. Each run records
+Outputs are written below `/home/spark/output`. Each run contains a compact
+mesh-free `dsg.json`, a self-contained `dsg_with_mesh.json`, and `mesh.ply`.
+Each run records
 `pipeline_version: v1` and a `dependency_lock_hash`; here `v1` means only the
 immutable upstream snapshot in `dependencies/locks/v1.lock.repos`.
 
@@ -70,11 +72,17 @@ immutable upstream snapshot in `dependencies/locks/v1.lock.repos`.
 # Live graph, profile selected by the dataset adapter.
 make rviz DATASET=spot
 
-# Saved graph, profile selected by the adapter.
-make rviz DATASET=spot DSG=/home/spark/output/run/dsg.json
+# Saved graph, profile selected by the adapter. If dsg.json is supplied, the
+# wrapper automatically uses its dsg_with_mesh.json sibling when present.
+make rviz DATASET=spot DSG=/home/spark/output/run/dsg_with_mesh.json
 
 # Saved graph without a dataset adapter.
-make rviz DSG=/home/spark/output/run/dsg.json \
+make rviz DSG=/home/spark/output/run/dsg_with_mesh.json \
+  VISUALIZATION_PROFILE=hierarchical
+
+# Repository example (mounted read-only by Compose).
+make rviz \
+  DSG=/home/spark/examples/dsg/uhumans2_office_ade20k_full_dsg_with_mesh.json \
   VISUALIZATION_PROFILE=hierarchical
 
 make inspect DSG=/home/spark/output/run/dsg.json \
@@ -82,7 +90,8 @@ make inspect DSG=/home/spark/output/run/dsg.json \
 ```
 
 The pinned visualizer loads saved JSON directly through `GraphFromFile`; Hydra
-or Khronos need not be running in file mode.
+or Khronos need not be running in file mode. A mesh-free file produces a
+warning before RViz starts.
 
 ## Tests
 

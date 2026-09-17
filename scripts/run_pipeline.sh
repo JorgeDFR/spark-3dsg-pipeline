@@ -256,6 +256,7 @@ metadata = {
     "dependency_lock_hash": hashlib.sha256(lock.read_bytes()).hexdigest(),
     "outputs": {
         "dsg": "dsg.json",
+        "dsg_with_mesh": "dsg_with_mesh.json",
         "mesh": "mesh.ply" if (run_dir / "mesh.ply").is_file() else None,
         "logs": "logs",
     },

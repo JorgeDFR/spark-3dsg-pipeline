@@ -38,6 +38,13 @@ fi
 file_mode=false
 if [[ -n "$dsg" ]]; then
   [[ -f "$dsg" ]] || { echo "DSG JSON not found: $dsg" >&2; exit 2; }
+  if [[ "$(basename "$dsg")" == dsg.json ]]; then
+    mesh_dsg="$(dirname "$dsg")/dsg_with_mesh.json"
+    if [[ -f "$mesh_dsg" ]]; then
+      echo "Using mesh-bearing DSG for visualization: $mesh_dsg"
+      dsg="$mesh_dsg"
+    fi
+  fi
   python3 - "$dsg" <<'PY'
 import json
 import sys
@@ -46,9 +53,16 @@ from pathlib import Path
 path = Path(sys.argv[1])
 try:
     with path.open("r", encoding="utf-8") as stream:
-        json.load(stream)
+        data = json.load(stream)
 except (OSError, UnicodeError, json.JSONDecodeError) as error:
     raise SystemExit(f"invalid DSG JSON '{path}': {error}")
+mesh = data.get("mesh")
+if not isinstance(mesh, dict) or not mesh.get("points") or not mesh.get("faces"):
+    print(
+        f"warning: DSG JSON '{path}' does not contain a non-empty embedded mesh; "
+        "RViz will show the graph without its mesh",
+        file=sys.stderr,
+    )
 PY
   file_mode=true
   use_sim_time=false

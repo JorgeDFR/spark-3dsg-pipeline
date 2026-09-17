@@ -10,6 +10,7 @@ x-common: &common
     - ${DATA_DIR:-./data}:/home/spark/data:ro
     - ${MODEL_DIR:-./models}:/home/spark/models
     - ${OUTPUT_DIR:-./output}:/home/spark/output
+    - ./examples:/home/spark/examples:ro
     - ${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:/home/spark/ros_ws/src/spark_3dsg_pipeline
     - spark-cache:/home/spark/.cache
     - ./scripts:/home/spark/spark-3dsg-pipeline/scripts #TEMP
@@ -65,6 +66,7 @@ services:
       - ${DATA_DIR:-./data}:/home/spark/data:ro
       - ${MODEL_DIR:-./models}:/home/spark/models
       - ${OUTPUT_DIR:-./output}:/home/spark/output
+      - ./examples:/home/spark/examples:ro
       - ${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:/home/spark/ros_ws/src/spark_3dsg_pipeline
       - spark-cache:/home/spark/.cache
       - /tmp/.X11-unix:/tmp/.X11-unix:rw

@@ -32,7 +32,12 @@ source_mesh_dsg=$(
   find "$(dirname "$source_dsg")" -maxdepth 1 -type f \
     -name '*dsg*mesh*.json' -print | sort | tail -n 1
 )
-[[ -n "$source_mesh_dsg" ]] || source_mesh_dsg="$source_dsg"
+[[ -n "$source_mesh_dsg" ]] || {
+  echo "mapping finished without a backend DSG JSON containing mesh under $(dirname "$source_dsg")" >&2
+  exit 1
+}
+cp "$source_mesh_dsg" "$run_dir/dsg_with_mesh.json"
+echo "Mesh-bearing backend DSG saved: $run_dir/dsg_with_mesh.json"
 
 if [[ ! -f "$run_dir/mesh.ply" ]]; then
   source_mesh=$(find "$upstream" -type f -path '*/backend/*.ply' -print | sort | tail -n 1)
@@ -72,4 +77,5 @@ PY
 fi
 
 test -s "$run_dir/dsg.json"
+test -s "$run_dir/dsg_with_mesh.json"
 echo "3D Scene Graph saved: $run_dir/dsg.json"

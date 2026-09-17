@@ -1,4 +1,5 @@
 from pathlib import Path
+import hashlib
 import re
 
 import yaml
@@ -240,6 +241,25 @@ def test_output_metadata_records_version_and_lock_hash():
     assert '"pipeline_version": "v1"' in runner
     assert '"dependency_lock_hash"' in runner
     assert 'run_dir / "v1.lock.repos"' in runner
+    assert '"dsg_with_mesh": "dsg_with_mesh.json"' in runner
+
+
+def test_mesh_bearing_example_graphs_are_tracked_outside_docker_context():
+    expected = {
+        "mit_courtyard_ade20k_full_dsg_with_mesh.json":
+            "cf00e8fc98ab3b0c616aba5fc12e347da8ffe8c9dcda58b162718f37970564ad",
+        "uhumans2_office_ade20k_full_dsg_with_mesh.json":
+            "25aa1328301bbd2abddb86275e152b5404fa0ee53912839018febbffbd45fb7e",
+    }
+    example_dir = ROOT / "examples/dsg"
+    for name, checksum in expected.items():
+        path = example_dir / name
+        assert path.is_file()
+        with path.open("rb") as stream:
+            assert hashlib.file_digest(stream, "sha256").hexdigest() == checksum
+    assert "examples/dsg/*.json" in (ROOT / ".dockerignore").read_text()
+    compose = yaml.safe_load((ROOT / "compose.yaml").read_text())
+    assert "./examples:/home/spark/examples:ro" in compose["x-common"]["volumes"]
 
 
 def test_non_root_runtime_and_artifact_ignores_remain():
