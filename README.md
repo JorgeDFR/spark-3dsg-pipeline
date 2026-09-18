@@ -1,4 +1,4 @@
-# spark-3dsg-pipeline
+# [Spark 3DSG pipeline](https://github.com/JorgeDFR/spark-3dsg-pipeline)
 
 Docker/ROS integration for building Spark-DSG scene graphs with the public
 MIT-SPARK stack. The repository owns launch, configuration, validation, and
@@ -34,8 +34,8 @@ All paths in the commands below are container paths.
 
 ## uHumans2 recorded-semantics demo
 
-This CPU demo uses the semantic class-ID images already stored in uHumans2. It
-builds the classic hierarchical graph and does not start an inference node.
+This CPU demo uses the semantic class-ID images already stored in uHumans2.
+It builds the classic hierarchical graph and does not start an inference node.
 
 Build the core image:
 
@@ -221,10 +221,10 @@ make rviz \
   VISUALIZATION_PROFILE=hierarchical
 ```
 
-For a saved ADT4/Khronos graph, select
-`VISUALIZATION_PROFILE=khronos` instead. If `dsg.json` is supplied, the wrapper
-automatically uses its `dsg_with_mesh.json` sibling when present. The pinned
-visualizer loads JSON directly; Hydra or Khronos need not be running.
+For a saved ADT4/Khronos graph, select `VISUALIZATION_PROFILE=khronos` instead.
+If `dsg.json` is supplied, the wrapper automatically uses its
+`dsg_with_mesh.json` sibling when present. The pinned visualizer loads JSON
+directly (Hydra or Khronos do not to be running).
 
 ### Inspect pipeline output
 
@@ -235,9 +235,10 @@ make inspect DSG=/home/spark/output/run/dsg.json \
 
 Each run is written under `/home/spark/output` with `dataset.yaml`,
 `mapping.yaml`, the resolved semantic/Hydra inputs, logs, `dsg.json`,
-`dsg_with_mesh.json`, and `mesh.ply`. Metadata records
-`pipeline_version: v1` and the exact dependency-lock hash; `v1` names only the
-immutable upstream snapshot in `dependencies/locks/v1.lock.repos`.
+`dsg_with_mesh.json`, and `mesh.ply`.
+Metadata records `pipeline_version: v1` and the exact dependency-lock hash;
+`v1` names only the immutable upstream snapshot in
+`dependencies/locks/v1.lock.repos`.
 
 ## Additional dataset and mapping configuration
 
@@ -245,20 +246,24 @@ immutable upstream snapshot in `dependencies/locks/v1.lock.repos`.
 `src/spark_3dsg_pipeline/config/datasets/custom_rgbd.yaml`, then set the bag's
 color, registered-depth, camera-info, `/tf`, and `/tf_static` topics; its map,
 robot, and camera optical frames; accepted depth encoding/scale; and playback
-rate. The bag must provide valid camera intrinsics and connected map-to-robot
-and robot-to-sensor transforms. Online mappings do not require semantic images.
+rate.
+The bag must provide valid camera intrinsics and connected map-to-robot
+and robot-to-sensor transforms.
+Online mappings do not require semantic images.
 
 The exact field-by-field procedure and validation command are in
-[Custom RGB-D sensor](docs/CUSTOM_SENSOR.md); the normalized topics and TF
-requirements are in the [input contract](docs/INPUT_CONTRACT.md). Keeping those
-details there avoids maintaining a second, diverging checklist in this README.
+[Custom RGB-D sensor](docs/CUSTOM_SENSOR.md).
+The normalized topics and TF requirements are in the
+[input contract](docs/INPUT_CONTRACT.md).
+Keeping those details there avoids maintaining a second,
+diverging checklist in this README.
 
-Mapping recipes live separately under
-`src/spark_3dsg_pipeline/config/mappings`. Choose `MAPPING=closed_set` or
-`MAPPING=open_set` for a custom adapter. Recorded mode is appropriate only when
-the adapter names a compatible class-ID semantic topic and the mapping's Hydra
-label-space/remap files match those IDs. Mapper internals and safe overrides are
-documented in the [Hydra configuration reference](docs/HYDRA_CONFIG_REFERENCE.md).
+Mapping recipes live separately under `src/spark_3dsg_pipeline/config/mappings`.
+Choose `MAPPING=closed_set` or `MAPPING=open_set` for a custom adapter.
+Recorded mode is appropriate only when the adapter names a compatible class-ID
+semantic topic and the mapping's Hydra label-space/remap files match those IDs.
+Mapper internals and safe overrides are documented in the
+[Hydra configuration reference](docs/HYDRA_CONFIG_REFERENCE.md).
 
 ## Tests
 
