@@ -129,8 +129,8 @@ def test_yoloe_model_settings_and_adt4_labels_are_independent():
     labels = load("config/perception/labels/adt4.yaml")
     assert "text_prompt" not in generic["model"]["instance_model"]
     assert labels["model"]["instance_model"]["text_prompt"]
-    adapter = load("config/datasets/spot.yaml")
-    assert adapter["semantics"]["labels_config"].endswith("labels/adt4.yaml")
+    mapping = load("config/mappings/open_set.yaml")
+    assert mapping["semantics"]["labels_config"].endswith("labels/adt4.yaml")
     assert "adt4.yaml" not in (PACKAGE / "config/perception/yoloe.yaml").read_text()
     runner = (ROOT / "scripts/run_pipeline.sh").read_text(encoding="utf-8")
     assert "--labels-config" in runner
@@ -138,15 +138,22 @@ def test_yoloe_model_settings_and_adt4_labels_are_independent():
 
 
 def test_all_referenced_package_local_files_exist():
-    for adapter_path in (PACKAGE / "config/datasets").glob("*.yaml"):
-        adapter = yaml.safe_load(adapter_path.read_text(encoding="utf-8"))
-        assert (PACKAGE / "config/hydra" / adapter["hydra_config"]).is_file()
-        for value in adapter["semantics"].values():
+    for mapping_path in (PACKAGE / "config/mappings").glob("*.yaml"):
+        mapping = yaml.safe_load(mapping_path.read_text(encoding="utf-8"))
+        assert (PACKAGE / "config/hydra" / mapping["hydra_config"]).is_file()
+        for value in mapping["semantics"].values():
             if isinstance(value, str) and value.startswith("spark_3dsg_pipeline:"):
                 relative = value.split(":", 1)[1]
-                assert (PACKAGE / relative).is_file(), f"{adapter_path}: {relative}"
-        profile = adapter["visualization"]["profile"]
+                assert (PACKAGE / relative).is_file(), f"{mapping_path}: {relative}"
+        profile = mapping["visualization"]["profile"]
         assert (PACKAGE / "config/visualization" / f"{profile}.yaml").is_file()
+
+
+def test_datasets_do_not_select_mapping_or_semantics():
+    forbidden = {"scene_structure", "semantics", "visualization", "hydra_config"}
+    for dataset_path in (PACKAGE / "config/datasets").glob("*.yaml"):
+        dataset = yaml.safe_load(dataset_path.read_text(encoding="utf-8"))
+        assert not forbidden.intersection(dataset), dataset_path
 
 
 def test_exactly_two_structure_specific_visualizer_configs():
@@ -240,6 +247,8 @@ def test_output_metadata_records_version_and_lock_hash():
     runner = (ROOT / "scripts/run_pipeline.sh").read_text(encoding="utf-8")
     assert '"pipeline_version": "v1"' in runner
     assert '"dependency_lock_hash"' in runner
+    assert '"mapping": os.environ["PIPELINE_MAPPING"]' in runner
+    assert 'cp "$mapping_config_path" "$run_dir/mapping.yaml"' in runner
     assert 'run_dir / "v1.lock.repos"' in runner
     assert '"dsg_with_mesh": "dsg_with_mesh.json"' in runner
 
@@ -298,6 +307,19 @@ def test_pipeline_omits_unused_perception_launch_arguments():
         assert f'"{name}:=$' in closed_set
     assert "perception_config_path:=$perception_config" in open_set
     assert 'pipeline.launch.yaml "${launch_args[@]}"' in open_set
+
+
+def test_pipeline_waits_for_online_perception_before_bag_playback():
+    script = (ROOT / "scripts/run_pipeline.sh").read_text(encoding="utf-8")
+    readiness = script.index("perception_node=")
+    playback = script.index('"$pipeline_root/scripts/run_bag.sh"')
+
+    assert readiness < playback
+    assert "perception_node=/semantic_inference_closed_set" in script
+    assert "perception_node=/semantic_inference" in script
+    assert 'ros2 node info "$perception_node"' in script
+    assert 'grep -Fq "$color_topic:"' in script
+    assert '"$hydra_ready" == true && "$perception_ready" == true' in script
 
 
 def test_images_are_complete_single_stage_and_gpu_is_standalone():

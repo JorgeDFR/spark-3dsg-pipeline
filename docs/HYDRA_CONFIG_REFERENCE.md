@@ -9,9 +9,9 @@
 | `adt4.yaml` | Khronos `ActiveWindow` | `InstanceImageReceiver` | OBJECTS, MESH_PLACES |
 
 `classic.yaml` is structurally based on the pinned Hydra uHumans2 architecture,
-not on ADT4. Its taxonomy is supplied by the closed-set adapter as a separate
-Hydra label-space file. uHumans2 uses the same graph architecture but has a
-dedicated recorded-ID taxonomy/remap overlay.
+not on ADT4. Its taxonomy is supplied by the `closed_set` mapping recipe as a
+separate Hydra label-space file. The `recorded` recipe uses the same graph
+architecture but has a dedicated uHumans2 class-ID taxonomy/remap overlay.
 
 For hierarchical configs, `surface_places: place_2d` creates decoupled
 `MESH_PLACES`; `freespace_places: gvd` creates hierarchical `PLACES`.

@@ -1,9 +1,10 @@
 # Debugging and runtime validation
 
-Start with `make validate-bag`. Pipeline startup then checks the selected Hydra
-config, labelspace/grouping, model config, weights, visualization config, and
-open-set labels before launching ROS. Missing components are reported together
-by the Python resolver and individually by the runtime wrapper.
+Start with `make validate-bag` and pass the same `DATASET` and `MAPPING` planned
+for the run. Pipeline startup then checks the selected Hydra config,
+labelspace/grouping, model config, weights, visualization config, and open-set
+labels before launching ROS. Missing components are reported together by the
+Python resolver and individually by the runtime wrapper.
 
 Use:
 
@@ -27,8 +28,8 @@ streaming and does not require a mapper process.
 GPU smoke tests must run in Docker:
 
 1. uHumans2 recorded semantics.
-2. generic classic closed-set semantics.
-3. ADT4 with default labels.
+2. classic closed-set semantics with both Spot and uHumans2 input.
+3. ADT4 open-set semantics with both Spot and uHumans2 input.
 4. ADT4 with a small alternate labels overlay.
 5. live RViz for both scene structures.
 6. stop each mapper and load both saved JSON files.

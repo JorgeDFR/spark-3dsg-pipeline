@@ -155,6 +155,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bag", required=True, type=Path)
     parser.add_argument("--dataset", required=True)
+    parser.add_argument("--mapping", required=True)
     parser.add_argument("--max-messages", type=int, default=20000)
     args = parser.parse_args()
 
@@ -163,7 +164,7 @@ def main() -> int:
         report.fail(f"bag does not exist: {args.bag}")
         return 1
 
-    config = load_config(args.dataset)
+    config = load_config(args.dataset, args.mapping)
     topics_cfg = config["topics"]
     frames = config["frames"]
     topics = topics_from_metadata(args.bag)

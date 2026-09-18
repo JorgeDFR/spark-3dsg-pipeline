@@ -1,19 +1,37 @@
-# Dataset adapters
+# Dataset adapters and mapping recipes
 
-| Adapter | Structure | Semantics | Visualizer | Mapper |
+Dataset adapters and mapping recipes are deliberately independent.
+
+| Dataset adapter | Bag-specific input |
+| --- | --- |
+| `uhumans2` | TESSE RGB-D/TF topics plus recorded semantic images |
+| `spot` | ADT4 Hamilton Spot/ZED RGB-D/TF topics |
+| `custom_rgbd` | Generic registered RGB-D/TF template |
+
+| Mapping recipe | Structure | Semantics | Visualizer | Mapper |
 | --- | --- | --- | --- | --- |
-| `uhumans2` | hierarchical | recorded | hierarchical | `uhumans2.yaml` |
-| `custom_rgbd` | hierarchical | closed-set | hierarchical | `classic.yaml` |
-| `spot` | Khronos | open-set | Khronos | `adt4.yaml` |
+| `recorded` | hierarchical | recorded class IDs | hierarchical | `uhumans2.yaml` |
+| `closed_set` | hierarchical | online ADE20K | hierarchical | `classic.yaml` |
+| `open_set` | Khronos | online YOLOE | Khronos | `adt4.yaml` |
 
-uHumans2 plays its recorded class-ID image directly. `custom_rgbd` is the
-generic online closed-set example. `spot` is the concrete public ADT4/DCIST-T4
-example with Khronos and the default ADT4 prompt.
-
-The ADT4 labels file is replaceable at runtime:
+The online recipes can be composed with either `spot` or `uhumans2`, for
+example:
 
 ```bash
-make run PROFILE=gpu DATASET=spot BAG=/home/spark/data/spot \
+make run PROFILE=gpu DATASET=spot MAPPING=closed_set \
+  BAG=/home/spark/data/spot
+make run PROFILE=gpu DATASET=uhumans2 MAPPING=open_set \
+  BAG=/home/spark/data/uhumans2
+```
+
+`recorded` requires `topics.semantic` in the selected dataset and a compatible
+class-ID taxonomy. The supplied recipe is therefore intended for uHumans2.
+
+The open-set ADT4 labels file is replaceable at runtime:
+
+```bash
+make run PROFILE=gpu DATASET=spot MAPPING=open_set \
+  BAG=/home/spark/data/spot \
   LABELS_CONFIG=/home/spark/data/labels.yaml
 ```
 

@@ -14,13 +14,4 @@ frames:
 depth_scale: 1.0
 depth_encodings: [32FC1]
 use_sim_time: true
-scene_structure: khronos
-semantics:
-  source: open_set
-  perception_config: spark_3dsg_pipeline:config/perception/yoloe.yaml
-  labels_config: spark_3dsg_pipeline:config/perception/labels/adt4.yaml
-  labelspace_config: spark_3dsg_pipeline:config/labelspaces/from_message.yaml
-  pipeline_config: spark_3dsg_pipeline:config/labelspaces/no_remap.yaml
-visualization: {profile: khronos}
-hydra_config: adt4.yaml
 playback_rate: 1.0

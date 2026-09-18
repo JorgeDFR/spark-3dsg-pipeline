@@ -40,7 +40,7 @@ def test_saved_visualization_reports_missing_json_before_ros(tmp_path):
 
 def test_live_visualization_omits_empty_scene_graph_argument(tmp_path):
     result = subprocess.run(
-        [str(WRAPPER), "--dataset", "spot"],
+        [str(WRAPPER), "--dataset", "spot", "--mapping", "open_set"],
         capture_output=True,
         text=True,
         env=fake_ros_environment(tmp_path),

@@ -6,8 +6,8 @@
   image based directly on CUDA 12.8.1/Ubuntu 24.04 for Blackwell support.
 - Keep source and build tooling in both images, reuse one core image for CPU,
   tests, and RViz, and restore bind-mounted symlink-install development.
-- Separate scene structure, semantic source/taxonomy, and visualization profile
-  in dataset adapters, with fail-fast compatibility checks.
+- Separate bag-specific dataset adapters from reusable recorded, closed-set,
+  and open-set mapping recipes, with fail-fast compatibility checks.
 - Rebuild `classic.yaml` as hierarchical Hydra reconstruction with online
   closed-set semantics and externalize uHumans2 taxonomy/remapping.
 - Split YOLOE model settings from replaceable ADT4 prompts and add independent

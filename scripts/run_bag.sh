@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-bag="${1:?usage: run_bag.sh BAG DATASET [RATE]}"
-dataset="${2:?usage: run_bag.sh BAG DATASET [RATE]}"
+bag="${1:?usage: run_bag.sh BAG DATASET MAPPING [RATE]}"
+dataset="${2:?usage: run_bag.sh BAG DATASET MAPPING [RATE]}"
+mapping="${3:?usage: run_bag.sh BAG DATASET MAPPING [RATE]}"
 pipeline_root="${PIPELINE_ROOT:-/home/spark/spark-3dsg-pipeline}"
-rate="${3:-$(python3 "$pipeline_root/scripts/dataset_config.py" "$dataset" --get playback_rate)}"
+rate="${4:-$(python3 "$pipeline_root/scripts/dataset_config.py" "$dataset" --get playback_rate)}"
 
 [[ -e "$bag" ]] || { echo "bag not found: $bag" >&2; exit 2; }
 
@@ -15,7 +16,8 @@ topic() {
 color_topic=$(topic color)
 depth_topic=$(topic depth)
 camera_info_topic=$(topic camera_info)
-semantics_source=$(python3 "$pipeline_root/scripts/dataset_config.py" "$dataset" --get semantics.source)
+semantics_source=$(python3 "$pipeline_root/scripts/dataset_config.py" \
+  "$dataset" --mapping "$mapping" --get semantics.source)
 if [[ "$semantics_source" == recorded ]]; then
   semantic_topic=$(topic semantic)
 else

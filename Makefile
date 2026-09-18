@@ -3,6 +3,7 @@ SHELL := /bin/bash
 
 PROFILE ?= core
 DATASET ?= spot
+MAPPING ?=
 COMPOSE := docker compose
 CONTAINER_HOME := /home/spark
 PIPELINE_ROOT := $(CONTAINER_HOME)/spark-3dsg-pipeline
@@ -25,7 +26,7 @@ endif
 .PHONY: help build models prepare-data shell dev-shell validate-bag run inspect rviz gpu-smoke test lint clean config lock-dependencies
 
 help: ## Show this help
-	@awk 'BEGIN {FS = ":.*## "; printf "Usage: make <target> [PROFILE=core|gpu] [VAR=value]\n\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*## "; printf "Usage: make <target> [PROFILE=core|gpu] [DATASET=...] [MAPPING=...] [VAR=value]\n\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 config: ## Validate the resolved Compose configuration
 	@$(COMPOSE) config --quiet
@@ -50,22 +51,24 @@ shell: ## Open an interactive shell in the selected image
 dev-shell: ## Open the compiler/source development image
 	@$(COMPOSE) --profile dev run --rm --build core-dev bash
 
-validate-bag: ## Validate BAG against DATASET before mapping
+validate-bag: ## Validate BAG against the DATASET + MAPPING input contract
 	@test -n "$(BAG)" || { echo "BAG is required (container path, normally $(CONTAINER_HOME)/data/...)" >&2; exit 2; }
-	@$(COMPOSE) --profile $(PROFILE) run --rm $(SERVICE) $(PIPELINE_ROOT)/scripts/validate_bag.py --bag "$(BAG)" --dataset "$(DATASET)"
+	@test -n "$(MAPPING)" || { echo "MAPPING is required (recorded, closed_set, or open_set)" >&2; exit 2; }
+	@$(COMPOSE) --profile $(PROFILE) run --rm $(SERVICE) $(PIPELINE_ROOT)/scripts/validate_bag.py --bag "$(BAG)" --dataset "$(DATASET)" --mapping "$(MAPPING)"
 
-run: ## Run a headless bag pipeline; optional compatible HYDRA_CONFIG/LABELS_CONFIG
+run: ## Run DATASET with MAPPING=recorded|closed_set|open_set
 	@test -n "$(BAG)" || { echo "BAG is required (container path, normally $(CONTAINER_HOME)/data/...)" >&2; exit 2; }
-	@$(COMPOSE) --profile $(PROFILE) run --rm $(SERVICE) $(PIPELINE_ROOT)/scripts/run_pipeline.sh --dataset "$(DATASET)" --bag "$(BAG)" $(if $(HYDRA_CONFIG),--hydra-config "$(HYDRA_CONFIG)",) $(if $(LABELS_CONFIG),--labels-config "$(LABELS_CONFIG)",) $(RUN_ARGS)
+	@test -n "$(MAPPING)" || { echo "MAPPING is required (recorded, closed_set, or open_set)" >&2; exit 2; }
+	@$(COMPOSE) --profile $(PROFILE) run --rm $(SERVICE) $(PIPELINE_ROOT)/scripts/run_pipeline.sh --dataset "$(DATASET)" --mapping "$(MAPPING)" --bag "$(BAG)" $(if $(HYDRA_CONFIG),--hydra-config "$(HYDRA_CONFIG)",) $(if $(LABELS_CONFIG),--labels-config "$(LABELS_CONFIG)",) $(RUN_ARGS)
 
 inspect: ## Inspect DSG=/home/spark/output/.../dsg.json
 	@test -n "$(DSG)" || { echo "DSG is required (container path, normally $(CONTAINER_HOME)/output/...)" >&2; exit 2; }
 	@$(COMPOSE) --profile core run --rm core python3 $(PIPELINE_ROOT)/scripts/inspect_dsg.py "$(DSG)" $(INSPECT_ARGS)
 
-rviz: ## Visualize live or DSG=...; optionally set VISUALIZATION_PROFILE=...
+rviz: ## Visualize a live MAPPING or DSG=... with VISUALIZATION_PROFILE=...
 	@$(COMPOSE) --profile rviz run --rm rviz \
 		$(PIPELINE_ROOT)/scripts/run_visualization.sh \
-		$(if $(VISUALIZATION_PROFILE),,--dataset "$(DATASET)") \
+		$(if $(MAPPING),--dataset "$(DATASET)" --mapping "$(MAPPING)",$(if $(DSG),,--dataset "$(DATASET)")) \
 		$(if $(VISUALIZATION_PROFILE),--profile "$(VISUALIZATION_PROFILE)",) \
 		$(if $(DSG),--dsg "$(DSG)",)
 

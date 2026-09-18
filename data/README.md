@@ -10,13 +10,15 @@ Download the hardware-free Spot mapping bag referenced by Awesome-DCIST-T4 from 
 make prepare-data PREPARE_ARGS="--dataset spot"
 ```
 
-The command creates the canonical `data/spot` bag path. Spot is the default adapter.
+The command creates the canonical `data/spot` bag path.
 
 Validate and run it with:
 
 ```bash
-make validate-bag PROFILE=gpu BAG=/home/spark/data/spot
-make run PROFILE=gpu BAG=/home/spark/data/spot
+make validate-bag PROFILE=gpu DATASET=spot MAPPING=open_set \
+  BAG=/home/spark/data/spot
+make run PROFILE=gpu DATASET=spot MAPPING=open_set \
+  BAG=/home/spark/data/spot
 ```
 
 ## Public uHumans2 example
@@ -33,11 +35,17 @@ For a CPU run using recorded ground-truth semantics:
 
 ```bash
 make build PROFILE=core
-make validate-bag PROFILE=core DATASET=uhumans2 BAG=/home/spark/data/uhumans2
-make run PROFILE=core DATASET=uhumans2 BAG=/home/spark/data/uhumans2
+make validate-bag PROFILE=core DATASET=uhumans2 MAPPING=recorded \
+  BAG=/home/spark/data/uhumans2
+make run PROFILE=core DATASET=uhumans2 MAPPING=recorded \
+  BAG=/home/spark/data/uhumans2
 ```
 
-Preparation only normalizes storage and converts bag format; it does not synthesize semantic topics. A recording without the adapter's precomputed semantic image topic cannot use the CPU ground-truth-semantics path unchanged, so always validate the converted bag first.
+Preparation only normalizes storage and converts bag format; it does not
+synthesize semantic topics. A recording without the adapter's precomputed
+semantic image topic cannot use `MAPPING=recorded`, so always validate the
+converted bag first. Either online mapping can use the uHumans2 RGB-D input
+without consuming its recorded semantic topic.
 
 Downloads are intentionally manual: this repository does not redistribute bags or place large dataset files under version control.
 

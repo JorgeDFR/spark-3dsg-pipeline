@@ -1,0 +1,13 @@
+name: closed_set
+description: Hierarchical mapping with online ADE20K closed-set segmentation
+scene_structure: hierarchical
+semantics:
+  source: closed_set
+  model_file: ade20k-efficientvit_seg_l2.onnx
+  model_config: semantic_inference_ros:config/models/ade20k-efficientvit_seg_l2.yaml
+  labelspace_name: ade20k_mit
+  grouping_config: semantic_inference_ros:config/label_groupings/ade20k_mit.yaml
+  labelspace_config: hydra:config/label_spaces/ade20k_mit_label_space.yaml
+  pipeline_config: spark_3dsg_pipeline:config/labelspaces/no_remap.yaml
+visualization: {profile: hierarchical}
+hydra_config: classic.yaml

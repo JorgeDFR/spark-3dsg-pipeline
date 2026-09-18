@@ -6,8 +6,11 @@ import yaml
 
 from dataset_config import (
     REQUIRED_TOPIC_KEYS,
+    compose_config,
     get_value,
     load_config,
+    load_dataset_config,
+    load_mapping_config,
     resolve_config,
     validate_config,
     validate_hydra_config,
@@ -15,14 +18,14 @@ from dataset_config import (
 )
 
 
-def test_dataset_dimensions_resolve_independently():
+def test_mapping_dimensions_resolve_independently_from_datasets():
     expected = {
-        "custom_rgbd": ("hierarchical", "closed_set", "hierarchical", "classic.yaml"),
-        "uhumans2": ("hierarchical", "recorded", "hierarchical", "uhumans2.yaml"),
-        "spot": ("khronos", "open_set", "khronos", "adt4.yaml"),
+        "recorded": ("hierarchical", "recorded", "hierarchical", "uhumans2.yaml"),
+        "closed_set": ("hierarchical", "closed_set", "hierarchical", "classic.yaml"),
+        "open_set": ("khronos", "open_set", "khronos", "adt4.yaml"),
     }
-    for name, values in expected.items():
-        config = load_config(name)
+    for mapping, values in expected.items():
+        config = load_config("uhumans2", mapping)
         assert (
             config["scene_structure"],
             config["semantics"]["source"],
@@ -30,19 +33,27 @@ def test_dataset_dimensions_resolve_independently():
             config["hydra_config"],
         ) == values
 
+    for dataset in ("spot", "uhumans2"):
+        for mapping in ("closed_set", "open_set"):
+            assert load_config(dataset, mapping)["mapping"] == mapping
+
 
 def test_known_dataset_and_dotted_query_resolve():
     assert resolve_config("custom_rgbd").name == "custom_rgbd.yaml"
-    config = load_config("custom_rgbd")
+    assert resolve_config("closed_set", "mappings").name == "closed_set.yaml"
+    config = load_config("custom_rgbd", "closed_set")
     assert get_value(config, "frames.sensor") == "camera_color_optical_frame"
     assert get_value(config, "semantics.labelspace_name") == "ade20k_mit"
 
 
 def test_dataset_topics_have_normalized_contract():
     for name in ("spot", "custom_rgbd", "uhumans2"):
-        assert set(REQUIRED_TOPIC_KEYS).issubset(load_config(name)["topics"])
-    assert load_config("uhumans2")["topics"]["semantic"].startswith("/tesse/")
-    assert "semantic" not in load_config("spot")["topics"]
+        assert set(REQUIRED_TOPIC_KEYS).issubset(load_dataset_config(name)["topics"])
+    assert load_dataset_config("uhumans2")["topics"]["semantic"].startswith("/tesse/")
+    assert "semantic" not in load_dataset_config("spot")["topics"]
+    for name in ("spot", "custom_rgbd", "uhumans2"):
+        assert "semantics" not in load_dataset_config(name)
+        assert "scene_structure" not in load_dataset_config(name)
 
 
 @pytest.mark.parametrize(
@@ -60,17 +71,20 @@ def test_dataset_topics_have_normalized_contract():
     ],
 )
 def test_invalid_dimension_combinations_fail_early(change, message):
-    config = deepcopy(load_config("custom_rgbd"))
+    config = deepcopy(load_mapping_config("closed_set"))
     config.update(change)
     with pytest.raises(ValueError, match=message):
         validate_config(config)
 
 
 def test_recorded_semantics_requires_bag_semantic_topic():
-    config = deepcopy(load_config("uhumans2"))
-    config["topics"].pop("semantic")
+    dataset = deepcopy(load_dataset_config("uhumans2"))
+    dataset["topics"].pop("semantic")
     with pytest.raises(ValueError, match="topics.semantic"):
-        validate_config(config)
+        compose_config(dataset, load_mapping_config("recorded"))
+
+    with pytest.raises(ValueError, match="topics.semantic"):
+        load_config("spot", "recorded")
 
 
 def test_hydra_override_must_match_explicit_dimensions(tmp_path):
@@ -84,7 +98,7 @@ backend: {update_functors: {objects: {type: GenericUpdateFunctor}}}
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="requires ClosedSetImageReceiver"):
-        validate_hydra_config(load_config("custom_rgbd"), incompatible)
+        validate_hydra_config(load_config("custom_rgbd", "closed_set"), incompatible)
 
 
 def test_dataset_rejects_incomplete_topic_contract(tmp_path):
@@ -94,8 +108,26 @@ def test_dataset_rejects_incomplete_topic_contract(tmp_path):
         load_config(str(config))
 
 
+def test_dataset_rejects_mapping_settings(tmp_path):
+    config = deepcopy(load_dataset_config("custom_rgbd"))
+    config["semantics"] = {"source": "closed_set"}
+    path = tmp_path / "coupled.yaml"
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    with pytest.raises(ValueError, match="move them to config/mappings"):
+        load_dataset_config(str(path))
+
+
+def test_dataset_requires_complete_frame_contract(tmp_path):
+    config = deepcopy(load_dataset_config("custom_rgbd"))
+    config["frames"].pop("sensor")
+    path = tmp_path / "missing-frame.yaml"
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    with pytest.raises(ValueError, match="missing frames: sensor"):
+        load_dataset_config(str(path))
+
+
 def test_runtime_validation_reports_closed_set_components(tmp_path):
-    config = load_config("custom_rgbd")
+    config = load_config("custom_rgbd", "closed_set")
     shares = {
         "spark_3dsg_pipeline": tmp_path / "pipeline",
         "semantic_inference_ros": tmp_path / "semantic",
@@ -112,7 +144,7 @@ def test_runtime_validation_reports_closed_set_components(tmp_path):
 
 
 def test_runtime_validation_accepts_complete_open_set_resources(tmp_path):
-    config = load_config("spot")
+    config = load_config("spot", "open_set")
     shares = {
         "spark_3dsg_pipeline": tmp_path / "pipeline",
         "semantic_inference_ros": tmp_path / "semantic",

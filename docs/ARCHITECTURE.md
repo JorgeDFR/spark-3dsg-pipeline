@@ -1,16 +1,19 @@
 # Architecture
 
-The integration resolves three orthogonal choices before ROS starts:
+The integration composes bag acquisition with a mapping recipe before ROS
+starts:
 
 ```text
-dataset adapter
-  +-- scene_structure: hierarchical | khronos
-  +-- semantics.source: recorded | closed_set | open_set
-  +-- visualization.profile: hierarchical | khronos
+dataset adapter                 mapping recipe
+  +-- topics                      +-- scene_structure
+  +-- frames                      +-- semantics.source/resources
+  +-- depth/playback              +-- Hydra + visualization profiles
 ```
 
-Invalid combinations fail in `scripts/dataset_config.py`. Visualization is
-selected from explicit adapter metadata, never from a Hydra YAML filename.
+Thus Spot and uHumans2 do not imply a semantic source or scene structure.
+Invalid composed configurations fail in `scripts/dataset_config.py`.
+Visualization is selected from explicit mapping metadata, never from a dataset
+name or Hydra YAML filename.
 
 ## Scene structures
 

@@ -91,7 +91,7 @@ services:
       - spark-cache:/home/spark/.cache
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ./scripts:/home/spark/spark-3dsg-pipeline/scripts:ro
-    command: ["/home/spark/spark-3dsg-pipeline/scripts/run_visualization.sh", "--dataset", "spot"]
+    command: ["/home/spark/spark-3dsg-pipeline/scripts/run_visualization.sh", "--dataset", "spot", "--mapping", "open_set"]
 
 volumes:
   spark-cache:
