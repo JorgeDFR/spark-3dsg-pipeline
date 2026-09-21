@@ -1,5 +1,9 @@
 # Hydra configuration reference
 
+For the high-impact parameter guide, tuning directions, and the locked-source
+audit of unsupported keys, see [Hydra and Khronos parameter
+tuning](HYDRA_TUNING.md).
+
 ## Profiles
 
 | Config | Reconstruction | Receiver | Layers |

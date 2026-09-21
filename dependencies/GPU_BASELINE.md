@@ -7,17 +7,20 @@ open-set YOLOE whenever this set changes.
 | Component | Pinned value | Reason |
 | --- | --- | --- |
 | Container OS / Python | Ubuntu 24.04 / Python 3.12 | ROS 2 Jazzy binary platform |
-| CUDA toolkit | `nvidia/cuda:12.8.1-devel-ubuntu24.04` | First CUDA/PyTorch family supporting Blackwell; includes NVCC/runtime |
+| CUDA toolkit | `nvidia/cuda:12.8.1-devel-ubuntu24.04` builder; matching `runtime` final stage | First CUDA/PyTorch family supporting Blackwell; NVCC is build-only |
 | TensorRT | 10.9.0.34 for CUDA 12.8 | Ubuntu 24.04 + CUDA 12.8 release; Blackwell support |
 | PyTorch | 2.7.0 `cu128` | Pinned Awesome-DCIST-T4 compatibility reference |
 | torchvision | 0.22.0 `cu128` | Official match for PyTorch 2.7.0 |
 | cuDNN | 9.7.1.26, supplied by the PyTorch wheel | Official PyTorch 2.7 CUDA 12.8 wheel dependency |
 | Ultralytics | 8.4.130 | Repository Python dependency lock |
+| Ultralytics CLIP | `68dce32140994dfcb645a1320c4ebdc034fc19fd` | Exact source used by YOLOE text prompting |
 
-The CUDA base tag, exact TensorRT apt version, and PyTorch wheel index are
-declared in `docker/Dockerfile.gpu`; Python package versions are in
-`dependencies/gpu.requirements.txt`. The image build asserts the installed
-PyTorch, torchvision, CUDA toolkit, and TensorRT-compatible build. Its single
+The CUDA builder/runtime tags, exact TensorRT apt version, and PyTorch wheel
+index are declared in `docker/Dockerfile.gpu`; Python package versions are in
+`dependencies/gpu.requirements.txt`, and the source-only CLIP dependency is in
+`dependencies/locks/gpu.lock.repos`. The builder asserts the CUDA toolkit and
+TensorRT-compatible build. The final image repeats the linkage and Python import
+checks after installing only TensorRT's shared runtime packages. Its single
 semantic-inference virtual environment also contains the bag conversion tools,
 while ROS Python packages remain available through the sourced ROS environment.
 
@@ -44,19 +47,20 @@ make gpu-smoke
 ```
 
 The smoke test checks the installed versions, CUDA availability, device name,
-and YOLOE model loading. Closed-set and open-set end-to-end smoke tests remain
-required before declaring a newly qualified GPU/driver combination supported.
+YOLOE model loading, and CLIP-backed text prompt encoding. Closed-set and
+open-set end-to-end smoke tests remain required before declaring a newly
+qualified GPU/driver combination supported.
 
 ## Why the image does not start from `pytorch/pytorch`
 
 The matching `pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime` image uses an
 Ubuntu 22.04/Conda Python stack. ROS 2 Jazzy binary packages target Ubuntu 24.04
 and system Python 3.12. Starting from the PyTorch image would mix incompatible
-OS/Python assumptions. This repository instead starts the standalone GPU image
-from NVIDIA's CUDA 12.8.1 development image for Ubuntu 24.04, installs Jazzy,
-and then installs the official `cu128` wheels into a Python 3.12 virtual
-environment. The retained development toolchain is intentional: debuggability
-and build reliability take priority over final image size.
+OS/Python assumptions. This repository instead builds on NVIDIA's CUDA 12.8.1
+development image for Ubuntu 24.04, installs Jazzy and the official `cu128`
+wheels into a Python 3.12 virtual environment, then copies the resulting
+artifacts into NVIDIA's matching CUDA runtime image. CUDA/TensorRT development
+packages and the colcon build tree do not enter the final image.
 
 ## Upstream references
 

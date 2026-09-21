@@ -14,10 +14,11 @@ make inspect DSG=/home/spark/output/run/dsg.json \
 ```
 
 Use `make dev-shell` for the complete compiler environment, pytest, or upstream
-source access. The normal `core` and `gpu` shells contain the same source and
-build trees as their images, so build failures can be reproduced in place.
-Image size is deliberately secondary; use `docker image ls` or `docker history`
-only when disk use itself is the issue.
+source access. The core image retains its source and build tree. The GPU runtime
+image deliberately omits compilers, upstream source, and build objects; use the
+Docker builder-stage output or rebuild with progress enabled when diagnosing a
+GPU compilation failure. Use `docker image ls` and `docker image history` to
+confirm the runtime image contains only the expected final-stage layers.
 
 For file visualization, a missing path fails before launch and malformed JSON
 returns nonzero with a parse explanation. When given `dsg.json`, the wrapper

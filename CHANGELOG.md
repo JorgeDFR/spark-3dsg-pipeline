@@ -2,10 +2,15 @@
 
 ## Unreleased
 
-- Simplify Docker to independent single-stage core and GPU images, with the GPU
-  image based directly on CUDA 12.8.1/Ubuntu 24.04 for Blackwell support.
-- Keep source and build tooling in both images, reuse one core image for CPU,
-  tests, and RViz, and restore bind-mounted symlink-install development.
+- Build the GPU image in separate CUDA development and runtime stages, retain
+  only TensorRT runtime libraries and installed artifacts, and avoid the
+  multi-gigabyte recursive-ownership layer.
+- Install the exact-SHA Ultralytics CLIP dependency during the GPU build and
+  exercise YOLOE text prompt encoding in the GPU smoke test.
+- Keep independently buildable core and GPU images, with the GPU build based
+  directly on CUDA 12.8.1/Ubuntu 24.04 for Blackwell support.
+- Keep source and build tooling in the core image, reuse it for CPU, tests, and
+  RViz, and retain bind-mounted integration-resource development in both images.
 - Separate bag-specific dataset adapters from reusable recorded, closed-set,
   and open-set mapping recipes, with fail-fast compatibility checks.
 - Rebuild `classic.yaml` as hierarchical Hydra reconstruction with online

@@ -38,9 +38,6 @@ frontend:
   surface_places:
     type: place_2d
     prefix: P
-    filter_by_relative_height: true
-    min_relative_z: -1.8
-    max_relative_z: -1.2
     pure_final_place_size: 1
     cluster_tolerance: 0.3
     min_cluster_size: 50

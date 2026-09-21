@@ -1,14 +1,15 @@
 # syntax=docker/dockerfile:1.7
 
-# ROS 2 Jazzy requires Ubuntu 24.04. The official PyTorch 2.7/CUDA 12.8 image
-# uses Ubuntu 22.04, so use NVIDIA's matching devel image and install the
-# official PyTorch cu128 wheels instead. CUDA and NVCC come from the base image.
+# Build against the complete CUDA toolchain, then copy only runtime artifacts
+# into the matching runtime image. Keeping the existing CUDA_IMAGE argument
+# preserves the documented builder override while CUDA_RUNTIME_IMAGE controls
+# the final stage independently.
 ARG CUDA_IMAGE=nvidia/cuda:12.8.1-devel-ubuntu24.04
-FROM ${CUDA_IMAGE}
+ARG CUDA_RUNTIME_IMAGE=nvidia/cuda:12.8.1-runtime-ubuntu24.04
+
+FROM ${CUDA_IMAGE} AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG USER_UID=1000
-ARG USER_GID=1000
 ARG TENSORRT_VERSION=10.9.0.34-1+cuda12.8
 ARG TORCH_VERSION=2.7.0
 ARG TORCHVISION_VERSION=0.22.0
@@ -25,9 +26,8 @@ ENV ROS_DISTRO=jazzy \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Install ROS directly on the Ubuntu 24.04 CUDA image, following the same model
-# as the MIT-SPARK development containers. The base already supplies the CUDA
-# compiler and runtime, so no CUDA package reconstruction is needed here.
+# ROS 2 Jazzy targets Ubuntu 24.04, so install it directly on NVIDIA's
+# matching CUDA image.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
@@ -46,6 +46,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
+# Development packages remain confined to this stage. The final stage installs
+# the corresponding runtime libraries independently.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential \
       git \
@@ -82,8 +84,10 @@ RUN rosdep init 2>/dev/null || true \
 
 WORKDIR ${ROS_WS}
 COPY dependencies/locks/v1.lock.repos /tmp/v1.lock.repos
+COPY dependencies/locks/gpu.lock.repos /tmp/gpu.lock.repos
 COPY scripts/bootstrap_dependencies.sh /tmp/bootstrap_dependencies.sh
-RUN /tmp/bootstrap_dependencies.sh ${ROS_WS}/src /tmp/v1.lock.repos
+RUN /tmp/bootstrap_dependencies.sh ${ROS_WS}/src /tmp/v1.lock.repos \
+    && /tmp/bootstrap_dependencies.sh ${ROS_WS}/src /tmp/gpu.lock.repos
 
 COPY src/spark_3dsg_pipeline src/spark_3dsg_pipeline
 RUN apt-get update \
@@ -92,7 +96,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY scripts/build_workspace.sh /tmp/build_workspace.sh
-RUN SPARK_BUILD_TESTING=OFF SPARK_SYMLINK_INSTALL=ON \
+# A copied runtime stage cannot use an install tree whose files point back into
+# the discarded build tree, so deliberately disable colcon's symlink install.
+RUN SPARK_BUILD_TESTING=OFF SPARK_SYMLINK_INSTALL=OFF \
     SPARK_SEMANTIC_INFERENCE_USE_TRT=ON \
     /tmp/build_workspace.sh ${ROS_WS}
 
@@ -106,7 +112,8 @@ RUN set +u \
     && ldd ${ROS_WS}/install/lib/libsemantic_inference.so \
          | grep -F 'libnvinfer.so.10 =>' \
     && ! ldd ${ROS_WS}/install/lib/libsemantic_inference.so \
-         | grep -F 'not found'
+         | grep -F 'not found' \
+    && ! find ${ROS_WS}/install -xtype l -print -quit | grep -q .
 
 WORKDIR ${PIPELINE_ROOT}
 COPY . ${PIPELINE_ROOT}
@@ -124,10 +131,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
          ${ROS_WS}/src/spark_config \
     && "${SEMANTIC_ENV}/bin/pip" install \
          --requirement dependencies/gpu.requirements.txt \
+    && "${SEMANTIC_ENV}/bin/pip" install \
+         ${ROS_WS}/src/ultralytics_clip \
     && "${SEMANTIC_ENV}/bin/pip" install --no-deps \
          ${ROS_WS}/src/semantic_inference/semantic_inference \
     && "${SEMANTIC_ENV}/bin/pip" check \
-    && chmod +x docker/*.sh scripts/*.sh scripts/*.py \
     && set +u \
     && source /opt/ros/${ROS_DISTRO}/setup.bash \
     && source ${ROS_WS}/install/setup.bash \
@@ -137,8 +145,70 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     && ros2 pkg prefix semantic_inference_ros \
     && ros2 pkg prefix spark_3dsg_pipeline \
     && python -c \
-         "import PIL, rclpy, semantic_inference, spark_dsg, torch, torchvision, ultralytics; assert torch.__version__.split('+')[0] == '${TORCH_VERSION}'; assert torchvision.__version__.split('+')[0] == '${TORCHVISION_VERSION}'; assert torch.version.cuda == '12.8'"
+         "import clip, PIL, rclpy, semantic_inference, spark_dsg, torch, torchvision, ultralytics; assert torch.__version__.split('+')[0] == '${TORCH_VERSION}'; assert torchvision.__version__.split('+')[0] == '${TORCHVISION_VERSION}'; assert torch.version.cuda == '12.8'"
 
+
+FROM ${CUDA_RUNTIME_IMAGE} AS runtime
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG USER_UID=1000
+ARG USER_GID=1000
+ARG TENSORRT_VERSION=10.9.0.34-1+cuda12.8
+ARG TORCH_VERSION=2.7.0
+ARG TORCHVISION_VERSION=0.22.0
+
+ENV ROS_DISTRO=jazzy \
+    ROS_WS=/home/spark/ros_ws \
+    PIPELINE_ROOT=/home/spark/spark-3dsg-pipeline \
+    SEMANTIC_ENV=/home/spark/.venvs/semantic_inference \
+    SEMANTIC_INFERENCE_MODEL_DIR=/home/spark/models/semantic_inference \
+    CUDA_HOME=/usr/local/cuda \
+    PYTHONUNBUFFERED=1 \
+    PATH=/home/spark/.venvs/semantic_inference/bin:/usr/local/cuda/bin:${PATH}
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      gnupg2 \
+      locales \
+      lsb-release \
+      software-properties-common \
+    && locale-gen en_US en_US.UTF-8 \
+    && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 \
+    && curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+         -o /usr/share/keyrings/ros-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu noble main" \
+         > /etc/apt/sources.list.d/ros2.list \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
+
+# Preserve the existing ROS desktop capability, but install only TensorRT's
+# shared runtime libraries. rosdep is used with exec dependencies only and sees
+# the builder source tree through an ephemeral BuildKit mount.
+RUN --mount=from=builder,source=/home/spark/ros_ws/src,target=/tmp/ros_src,ro \
+    apt-get update && apt-get install -y --no-install-recommends \
+      python3-rosdep \
+      ros-jazzy-desktop \
+      ros-jazzy-rmw-fastrtps-cpp \
+      ros-jazzy-rosbag2-storage-mcap \
+      "libnvinfer10=${TENSORRT_VERSION}" \
+      "libnvinfer-plugin10=${TENSORRT_VERSION}" \
+      "libnvonnxparsers10=${TENSORRT_VERSION}" \
+    && { rosdep init 2>/dev/null || true; } \
+    && rosdep update --rosdistro ${ROS_DISTRO} \
+    && rosdep install --from-paths /tmp/ros_src --ignore-src -r -y \
+         --rosdistro ${ROS_DISTRO} --dependency-types exec \
+    && test "$(dpkg-query -W -f='${Version}' libnvinfer10)" = \
+         "${TENSORRT_VERSION}" \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create the final UID/GID before copying large artifacts. COPY --chown records
+# each file only once, avoiding the multi-gigabyte copy-on-write layer produced
+# by a later recursive chown.
 RUN set -eux; \
     if getent group spark >/dev/null; then \
       groupmod --non-unique --gid "${USER_GID}" spark; \
@@ -154,9 +224,61 @@ RUN set -eux; \
     fi; \
     install -d -o "${USER_UID}" -g "${USER_GID}" \
       /home/spark /home/spark/.cache /home/spark/.ros \
-      /home/spark/data /home/spark/models /home/spark/output; \
-    chown -R "${USER_UID}:${USER_GID}" \
-      "${ROS_WS}" "${PIPELINE_ROOT}" /home/spark/.venvs
+      /home/spark/data /home/spark/models /home/spark/output \
+      /home/spark/ros_ws/src
+
+COPY --from=builder --chown=${USER_UID}:${USER_GID} \
+    /home/spark/ros_ws/install /home/spark/ros_ws/install
+COPY --from=builder --chown=${USER_UID}:${USER_GID} \
+    /home/spark/.venvs /home/spark/.venvs
+COPY --chown=${USER_UID}:${USER_GID} src/spark_3dsg_pipeline \
+    ${ROS_WS}/src/spark_3dsg_pipeline
+
+COPY --chown=${USER_UID}:${USER_GID} . ${PIPELINE_ROOT}
+WORKDIR ${PIPELINE_ROOT}
+
+# Preserve the existing bind-mounted development workflow for this
+# resource-only integration package without retaining the complete upstream
+# source and build trees. Keep real install directories because ros2 launch's
+# recursive file lookup does not descend into directory symlinks; link each
+# resource file individually instead.
+RUN source_root="${ROS_WS}/src/spark_3dsg_pipeline"; \
+    install_root="${ROS_WS}/install/share/spark_3dsg_pipeline"; \
+    for directory in config launch rviz; do \
+      while IFS= read -r -d '' source_file; do \
+        relative_path="${source_file#${source_root}/}"; \
+        install_file="${install_root}/${relative_path}"; \
+        install -d -o "${USER_UID}" -g "${USER_GID}" \
+          "$(dirname "${install_file}")"; \
+        rm -f "${install_file}"; \
+        ln -s "${source_file}" "${install_file}"; \
+        chown -h "${USER_UID}:${USER_GID}" "${install_file}"; \
+      done < <(find "${source_root}/${directory}" -type f -print0); \
+    done
+
+# Re-run the important linkage and import checks against the actual runtime
+# stage rather than assuming that a successful builder also has a complete
+# runtime dependency set.
+RUN set +u \
+    && source /opt/ros/${ROS_DISTRO}/setup.bash \
+    && source ${ROS_WS}/install/setup.bash \
+    && set -u \
+    && test -f ${ROS_WS}/install/lib/libsemantic_inference.so \
+    && ldd ${ROS_WS}/install/lib/libsemantic_inference.so \
+         | grep -F 'libnvinfer.so.10 =>' \
+    && ! ldd ${ROS_WS}/install/lib/libsemantic_inference.so \
+         | grep -F 'not found' \
+    && ! find ${ROS_WS}/install -xtype l -print -quit | grep -q . \
+    && ! command -v nvcc \
+    && ! dpkg-query -W libnvinfer-dev >/dev/null 2>&1 \
+    && ros2 pkg prefix hydra_ros \
+    && ros2 pkg prefix khronos_ros \
+    && ros2 pkg prefix semantic_inference_ros \
+    && ros2 pkg prefix spark_3dsg_pipeline \
+    && ros2 launch spark_3dsg_pipeline pipeline.launch.yaml \
+         --show-args >/dev/null \
+    && python -c \
+         "import clip, PIL, rclpy, semantic_inference, spark_dsg, torch, torchvision, ultralytics; assert torch.__version__.split('+')[0] == '${TORCH_VERSION}'; assert torchvision.__version__.split('+')[0] == '${TORCHVISION_VERSION}'; assert torch.version.cuda == '12.8'"
 
 ENV HOME=/home/spark \
     XDG_CACHE_HOME=/home/spark/.cache

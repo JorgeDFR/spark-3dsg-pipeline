@@ -54,6 +54,19 @@ def test_v1_lock_is_exact_https_and_consumed_by_build():
     assert "adt4.lock.repos" not in dockerfile
 
 
+def test_gpu_source_lock_is_exact_and_consumed_by_gpu_build():
+    lock_path = ROOT / "dependencies/locks/gpu.lock.repos"
+    lock = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+    entry = lock["repositories"]["ultralytics_clip"]
+    assert entry["url"] == "https://github.com/ultralytics/CLIP.git"
+    assert re.fullmatch(r"[0-9a-f]{40}", entry["version"])
+
+    gpu = (ROOT / "docker/Dockerfile.gpu").read_text(encoding="utf-8")
+    assert "dependencies/locks/gpu.lock.repos" in gpu
+    assert "/tmp/bootstrap_dependencies.sh ${ROS_WS}/src /tmp/gpu.lock.repos" in gpu
+    assert "${ROS_WS}/src/ultralytics_clip" in gpu
+
+
 def test_hierarchical_configs_have_full_classic_hierarchy():
     for name in ("classic", "uhumans2"):
         config = load(f"config/hydra/{name}.yaml")
@@ -322,7 +335,7 @@ def test_pipeline_waits_for_online_perception_before_bag_playback():
     assert '"$hydra_ready" == true && "$perception_ready" == true' in script
 
 
-def test_images_are_complete_single_stage_and_gpu_is_standalone():
+def test_core_is_complete_and_gpu_has_an_independent_runtime_stage():
     core = (ROOT / "docker/Dockerfile.core").read_text(encoding="utf-8")
     gpu = (ROOT / "docker/Dockerfile.gpu").read_text(encoding="utf-8")
     build_script = (ROOT / "scripts/build_workspace.sh").read_text(
@@ -331,18 +344,24 @@ def test_images_are_complete_single_stage_and_gpu_is_standalone():
 
     assert "ARG ROS_IMAGE=osrf/ros:jazzy-desktop-full" in core
     assert sum(line.startswith("FROM ") for line in core.splitlines()) == 1
-    assert sum(line.startswith("FROM ") for line in gpu.splitlines()) == 1
+    assert sum(line.startswith("FROM ") for line in gpu.splitlines()) == 2
     assert "--from=" not in core
-    assert "--from=" not in gpu
+    assert "FROM ${CUDA_IMAGE} AS builder" in gpu
+    assert "FROM ${CUDA_RUNTIME_IMAGE} AS runtime" in gpu
+    assert "COPY --from=builder --chown=${USER_UID}:${USER_GID}" in gpu
     assert "spark-3dsg-core" not in gpu
     assert "ARG CUDA_IMAGE=nvidia/cuda:12.8.1-devel-ubuntu24.04" in gpu
+    assert (
+        "ARG CUDA_RUNTIME_IMAGE=nvidia/cuda:12.8.1-runtime-ubuntu24.04" in gpu
+    )
     assert "ros-jazzy-desktop" in gpu
     assert "python3-vcstool" in core
     assert "python3-vcstool" in gpu
     assert "COPY . ${PIPELINE_ROOT}" in core
-    assert "COPY . ${PIPELINE_ROOT}" in gpu
+    assert "COPY --chown=${USER_UID}:${USER_GID} . ${PIPELINE_ROOT}" in gpu
     assert "SPARK_SYMLINK_INSTALL=ON" in core
-    assert "SPARK_SYMLINK_INSTALL=ON" in gpu
+    assert "SPARK_SYMLINK_INSTALL=OFF" in gpu
+    assert 'chown -R "${USER_UID}:${USER_GID}"' not in gpu
     assert "-DBUILD_TESTING=${SPARK_BUILD_TESTING:-OFF}" in build_script
     assert (
         '"-DSEMANTIC_INFERENCE_USE_TRT='
@@ -359,6 +378,7 @@ def test_gpu_stack_is_exact_and_python_is_self_contained():
 
     expected = {
         "ARG CUDA_IMAGE=nvidia/cuda:12.8.1-devel-ubuntu24.04",
+        "ARG CUDA_RUNTIME_IMAGE=nvidia/cuda:12.8.1-runtime-ubuntu24.04",
         "ARG TENSORRT_VERSION=10.9.0.34-1+cuda12.8",
         "ARG TORCH_VERSION=2.7.0",
         "ARG TORCHVISION_VERSION=0.22.0",
@@ -378,11 +398,24 @@ def test_gpu_stack_is_exact_and_python_is_self_contained():
         assert f'"{package}=${{TENSORRT_VERSION}}"' in gpu
     assert 'python3 -m venv "${SEMANTIC_ENV}"' in gpu
     assert 'venv --system-site-packages "${SEMANTIC_ENV}"' not in gpu
-    assert "import PIL, rclpy, semantic_inference, spark_dsg" in gpu
+    assert "import clip, PIL, rclpy, semantic_inference, spark_dsg" in gpu
     assert "SPARK_SEMANTIC_INFERENCE_USE_TRT=ON" in gpu
     assert "nvcc --version | grep -F 'release 12.8'" in gpu
     assert "grep -F 'libnvinfer.so.10 =>'" in gpu
     assert "grep -F 'not found'" in gpu
+    runtime = gpu.split("FROM ${CUDA_RUNTIME_IMAGE} AS runtime", 1)[1]
+    assert '"libnvinfer10=${TENSORRT_VERSION}"' in runtime
+    assert '"libnvinfer-plugin10=${TENSORRT_VERSION}"' in runtime
+    assert '"libnvonnxparsers10=${TENSORRT_VERSION}"' in runtime
+    assert '"libnvinfer-dev=${TENSORRT_VERSION}"' not in runtime
+    assert '"libnvinfer-plugin-dev=${TENSORRT_VERSION}"' not in runtime
+    assert '"libnvonnxparsers-dev=${TENSORRT_VERSION}"' not in runtime
+    assert "--dependency-types exec" in runtime
+    assert "! command -v nvcc" in runtime
+    assert "! dpkg-query -W libnvinfer-dev" in runtime
+    assert "find \"${source_root}/${directory}\" -type f -print0" in runtime
+    assert "ros2 launch spark_3dsg_pipeline pipeline.launch.yaml" in runtime
+    assert "--show-args >/dev/null" in runtime
     validation = gpu.split("SPARK_SEMANTIC_INFERENCE_USE_TRT=ON", 1)[1].split(
         "WORKDIR ${PIPELINE_ROOT}", 1
     )[0]
@@ -396,6 +429,8 @@ def test_gpu_stack_is_exact_and_python_is_self_contained():
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     assert "gpu-smoke:" in makefile
     assert "scripts/gpu_smoke_test.sh" in makefile
+    smoke = (ROOT / "scripts/gpu_smoke_test.sh").read_text(encoding="utf-8")
+    assert 'model.set_classes(["chair", "table"])' in smoke
 
 
 def test_compose_reuses_core_image_and_builds_gpu_independently():

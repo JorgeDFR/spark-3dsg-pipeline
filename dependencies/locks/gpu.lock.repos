@@ -1,0 +1,7 @@
+# Exact GPU-only Python source dependency. Ultralytics imports this CLIP fork
+# when YOLOE text prompts are converted to embeddings.
+repositories:
+  ultralytics_clip:
+    type: git
+    url: https://github.com/ultralytics/CLIP.git
+    version: 68dce32140994dfcb645a1320c4ebdc034fc19fd

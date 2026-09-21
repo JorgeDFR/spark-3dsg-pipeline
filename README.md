@@ -263,7 +263,8 @@ Choose `MAPPING=closed_set` or `MAPPING=open_set` for a custom adapter.
 Recorded mode is appropriate only when the adapter names a compatible class-ID
 semantic topic and the mapping's Hydra label-space/remap files match those IDs.
 Mapper internals and safe overrides are documented in the
-[Hydra configuration reference](docs/HYDRA_CONFIG_REFERENCE.md).
+[Hydra configuration reference](docs/HYDRA_CONFIG_REFERENCE.md) and
+[parameter tuning guide](docs/HYDRA_TUNING.md).
 
 ## Tests
 
