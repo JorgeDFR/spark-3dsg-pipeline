@@ -1,0 +1,19 @@
+# Requires recorded measured base_link->camera TF and Z values in millimetres; see docs/CAMERA_PROFILES.md.
+name: sick_visionary_s_cx
+description: Legacy Visionary-S CX ROS1 converted to ROS2; verify Z scaling/calibration
+input_kind: rosbag2
+topics:
+  color: /sick_visionary_s/rgba
+  color_camera_info: /sick_visionary_s/camera_info
+  depth: /sick_visionary_s/z
+  tf: /tf
+  tf_static: /tf_static
+frames:
+  odom: odom
+  robot: base_link
+  sensor: camera
+depth:
+  mode: registered
+  scale: 1000.0
+  accepted_encodings:
+  - 16UC1

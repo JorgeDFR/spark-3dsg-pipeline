@@ -163,3 +163,14 @@ def test_runtime_validation_accepts_complete_open_set_resources(tmp_path):
         path.write_text("---\n{}\n", encoding="utf-8")
     resolved = validate_runtime_resources(config, shares, tmp_path / "models")
     assert resolved["open-set labels config"].name == "adt4.yaml"
+
+
+def test_custom_dataset_path_is_used_and_missing_path_never_falls_back(tmp_path):
+    custom = tmp_path / "custom_rgbd.yaml"
+    config = load_dataset_config("custom_rgbd")
+    config["topics"]["color"] = "/my_camera/rgb"
+    custom.write_text(yaml.safe_dump(config))
+    assert load_config(str(custom), "open_set")["topics"]["color"] == "/my_camera/rgb"
+    custom.unlink()
+    with pytest.raises(FileNotFoundError, match="config file not found"):
+        load_config(str(custom), "open_set")

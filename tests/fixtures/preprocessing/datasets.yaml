@@ -1,0 +1,80 @@
+version: 2
+datasets:
+  zed2_lake_h265:
+    description: Official Stereolabs ZED2 Lake H.265 sample
+    url: https://download.stereolabs.com/assets/svo_samples/ZED2_Lake_H265
+    relative_path: raw/test-preprocess/ZED2_Lake_H265.svo
+    legacy_relative_paths:
+    - raw/validation/ZED2_Lake_H265.svo
+    - raw/qualification/ZED2_Lake_H265.svo
+    - raw/ZED2_Lake_H265.svo
+    - preprocessing/raw/ZED2_Lake_H265.svo
+    bytes: 88541611
+    format: zed_svo
+    license_url: https://www.stereolabs.com/terms
+  uosm_zed2i_svo2:
+    description: UoSM-Campus UF-01-N ZED2i SVO2 with embedded IMU
+    url: https://huggingface.co/datasets/lsk950329/UoSM-Campus/resolve/main/UF-01-N/svo_20251227_131531/20251227_131531.svo2?download=true
+    relative_path: raw/test-preprocess/UoSM_UF-01-N.svo2
+    legacy_relative_paths:
+    - raw/validation/UoSM_UF-01-N.svo2
+    - raw/qualification/UoSM_UF-01-N.svo2
+    - raw/UoSM_UF-01-N.svo2
+    - preprocessing/raw/UoSM_UF-01-N.svo2
+    bytes: 109353995
+    format: zed_svo
+    license: MIT
+  d435i_run009:
+    description: Short D435i RGB-D, infrared, IMU, odometry and TF recording
+    url: https://huggingface.co/datasets/ly041021/odom_dataset/resolve/main/raw/sessions/2026-05-14_002421_odom_run009/bag.bag?download=true
+    relative_path: raw/test-preprocess/d435i_run009.bag
+    legacy_relative_paths:
+    - raw/validation/d435i_run009.bag
+    - raw/qualification/d435i_run009.bag
+    - raw/d435i_run009.bag
+    - preprocessing/raw/d435i_run009.bag
+    bytes: 633681350
+    format: rosbag1
+    converted_path: raw/test-preprocess/d435i_run009_ros2
+    legacy_converted_paths:
+    - raw/validation/d435i_run009_ros2
+    - raw/qualification/d435i_run009_ros2
+    - prepared/qualification/d435i_run009
+    - prepared/validation/d435i_run009
+    - normalized/d435i_run009
+    - preprocessing/ros2/d435i_run009
+    include_topics:
+    - /camera/infra1/image_rect_raw
+    - /camera/infra1/camera_info
+    - /camera/infra2/image_rect_raw
+    - /camera/infra2/camera_info
+    - /camera/depth/image_rect_raw
+    - /camera/depth/camera_info
+    - /mavros/imu/data
+    - /fusion_odometry/lazy_point_odom
+    - /tf_static
+    license: CC-BY-NC-4.0
+  tum_fr1_xyz:
+    description: TUM RGB-D Freiburg 1 xyz debugging sequence
+    url: https://cvg.cit.tum.de/rgbd/dataset/freiburg1/rgbd_dataset_freiburg1_xyz.bag
+    relative_path: raw/test-preprocess/rgbd_dataset_freiburg1_xyz.bag
+    legacy_relative_paths:
+    - raw/validation/rgbd_dataset_freiburg1_xyz.bag
+    - raw/qualification/rgbd_dataset_freiburg1_xyz.bag
+    - raw/rgbd_dataset_freiburg1_xyz.bag
+    - preprocessing/raw/rgbd_dataset_freiburg1_xyz.bag
+    bytes: 503765314
+    format: rosbag1
+    converted_path: raw/test-preprocess/tum_fr1_xyz_ros2
+    legacy_converted_paths:
+    - raw/validation/tum_fr1_xyz_ros2
+    - raw/qualification/tum_fr1_xyz_ros2
+    - prepared/qualification/tum_fr1_xyz
+    - prepared/validation/tum_fr1_xyz
+    - normalized/tum_fr1_xyz
+    - preprocessing/ros2/tum_fr1_xyz
+    include_topics:
+    - /camera/rgb/image_color
+    - /camera/rgb/camera_info
+    - /camera/depth/image
+    license_url: https://cvg.cit.tum.de/data/datasets/rgbd-dataset/download

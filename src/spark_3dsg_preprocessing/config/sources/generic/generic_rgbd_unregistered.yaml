@@ -1,0 +1,19 @@
+name: generic_rgbd_unregistered
+description: Generic ROS 2 recording with depth in its native optical frame
+input_kind: rosbag2
+topics:
+  color: /camera/color/image_raw
+  color_camera_info: /camera/color/camera_info
+  depth: /camera/depth/image_rect_raw
+  depth_camera_info: /camera/depth/camera_info
+  tf: /tf
+  tf_static: /tf_static
+frames:
+  odom: odom
+  robot: camera_link
+  sensor: camera_color_optical_frame
+depth:
+  mode: register
+  scale: 1000.0
+  accepted_encodings:
+  - 16UC1

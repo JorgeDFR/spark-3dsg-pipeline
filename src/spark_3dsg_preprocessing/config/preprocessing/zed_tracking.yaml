@@ -1,0 +1,7 @@
+name: zed_tracking
+description: ZED SDK positional tracking during SVO replay
+pose:
+  backend: zed_tracking
+synchronization:
+  approximate: false
+  queue_size: 30

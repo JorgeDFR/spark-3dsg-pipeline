@@ -1,0 +1,20 @@
+# Enable transformed_depth and record static TF; no IMU/odometry. See docs/CAMERA_PROFILES.md.
+name: vzense_scepter
+description: ScepterSDK ROS2 depth transformed to color; replace SERIAL
+input_kind: rosbag2
+topics:
+  color: /tof_camera/SERIAL/color/image_raw
+  color_camera_info: /tof_camera/SERIAL/color/camera_info
+  depth: /tof_camera/SERIAL/transformedDepth/image_raw
+  depth_camera_info: /tof_camera/SERIAL/transformedDepth/camera_info
+  tf: /tf
+  tf_static: /tf_static
+frames:
+  odom: odom
+  robot: tof_camera_frame
+  sensor: tof_camera_color_frame
+depth:
+  mode: registered
+  scale: 1000.0
+  accepted_encodings:
+  - 16UC1

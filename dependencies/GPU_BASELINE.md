@@ -7,8 +7,8 @@ open-set YOLOE whenever this set changes.
 | Component | Pinned value | Reason |
 | --- | --- | --- |
 | Container OS / Python | Ubuntu 24.04 / Python 3.12 | ROS 2 Jazzy binary platform |
-| CUDA toolkit | `nvidia/cuda:12.8.1-devel-ubuntu24.04` builder; matching `runtime` final stage | First CUDA/PyTorch family supporting Blackwell; NVCC is build-only |
-| TensorRT | 10.9.0.34 for CUDA 12.8 | Ubuntu 24.04 + CUDA 12.8 release; Blackwell support |
+| CUDA toolkit | `nvidia/cuda:12.8.1-devel-ubuntu24.04` | First CUDA/PyTorch family supporting Blackwell |
+| TensorRT | 10.9.0.34 for CUDA 12.8 | Ubuntu 24.04 + CUDA 12.8 release (Blackwell support) |
 | PyTorch | 2.7.0 `cu128` | Pinned Awesome-DCIST-T4 compatibility reference |
 | torchvision | 0.22.0 `cu128` | Official match for PyTorch 2.7.0 |
 | cuDNN | 9.7.1.26, supplied by the PyTorch wheel | Official PyTorch 2.7 CUDA 12.8 wheel dependency |
@@ -16,7 +16,7 @@ open-set YOLOE whenever this set changes.
 | Ultralytics CLIP | `68dce32140994dfcb645a1320c4ebdc034fc19fd` | Exact source used by YOLOE text prompting |
 
 The CUDA builder/runtime tags, exact TensorRT apt version, and PyTorch wheel
-index are declared in `docker/Dockerfile.gpu`; Python package versions are in
+index are declared in `docker/Dockerfile.gpu`. Python package versions are in
 `dependencies/gpu.requirements.txt`, and the source-only CLIP dependency is in
 `dependencies/locks/gpu.lock.repos`. The builder asserts the CUDA toolkit and
 TensorRT-compatible build. The final image repeats the linkage and Python import
@@ -26,7 +26,7 @@ while ROS Python packages remain available through the sourced ROS environment.
 
 ## Host driver and GPU
 
-The host needs an NVIDIA driver and NVIDIA Container Toolkit; it does **not**
+The host needs an NVIDIA driver and NVIDIA Container Toolkit. It does **not**
 need a host CUDA toolkit. The `CUDA Version` shown by `nvidia-smi` is the newest
 CUDA driver API the installed driver supports, not the toolkit version that a
 container must use. A host reporting CUDA 13.0 can therefore run this CUDA 12.8

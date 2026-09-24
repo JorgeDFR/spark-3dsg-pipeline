@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SAVE_DSG = ROOT / "scripts/save_dsg.sh"
+SAVE_DSG = ROOT / "scripts/shell/save_dsg.sh"
 
 
 def test_save_dsg_writes_normalized_graph_without_embedded_mesh(tmp_path):

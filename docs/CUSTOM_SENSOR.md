@@ -1,46 +1,75 @@
-# Custom RGB-D sensor
+# Dataset adapter reference
 
-Copy `src/spark_3dsg_pipeline/config/datasets/custom_rgbd.yaml` to a new YAML
-file in the same directory. A dataset adapter describes acquisition only; it
-must not select semantics, graph structure, Hydra config, or visualization.
+A dataset adapter describes a bag's topics, frames, depth units, and playback.
+Use the [custom dataset guide](CUSTOM_DATASET.md) for the complete workflow.
+Mapping recipes independently select semantics, graph structure, and visualization.
 
-Set these fields to match the rosbag:
+## Create an adapter
 
-- `topics.color`: RGB `sensor_msgs/msg/Image`.
-- `topics.depth`: depth registered to the color image.
-- `topics.camera_info`: intrinsics for the color image.
-- `topics.tf` and `topics.tf_static`: normally `/tf` and `/tf_static`.
-- `frames.map`, `frames.robot`, and `frames.sensor`: a connected transform path
-  from the fixed frame to the robot and then the camera optical frame.
-- `frames.odom`: the odometry frame used by the mapper.
-- `depth_encodings`: encodings present in the bag, normally `16UC1`, `32FC1`,
-  or both.
-- `depth_scale`: units per meter (`1000.0` for millimeters, `1.0` for meters).
-- `playback_rate` and `use_sim_time`: rosbag playback behavior.
-
-The color, depth, and camera-info streams must be calibrated and synchronized
-tightly enough for registered RGB-D reconstruction. `CameraInfo` must contain
-positive image dimensions and focal lengths. The bag also needs monotonically
-increasing timestamps and the configured TF paths. The complete normalized
-topic contract is documented in [INPUT_CONTRACT.md](INPUT_CONTRACT.md).
-
-Validate before starting a long run:
+Copy the normalized RGB-D example into `data/custom-configs`:
 
 ```bash
-make validate-bag PROFILE=gpu DATASET=my_sensor MAPPING=closed_set \
-  BAG=/home/spark/data/my_sensor
+cp src/spark_3dsg_pipeline/config/datasets/custom_rgbd.yaml data/custom-configs/my_sensor.yaml
 ```
 
-Choose the processing independently:
+With an external `DATA_DIR`, copy to that root's `custom-configs` directory.
+Pass the edited file as
+`DATASET=/home/spark/data/custom-configs/my_sensor.yaml`.
 
-- `MAPPING=closed_set` uses ADE20K inference and the classic hierarchical
-  graph.
-- `MAPPING=open_set` uses the configurable YOLOE prompt and Khronos graph.
-- `MAPPING=recorded` requires an additional `topics.semantic` image containing
-  class IDs, plus a mapping recipe whose label-space and remap configs exactly
-  match those IDs. Copy `config/mappings/recorded.yaml` only when that contract
-  applies.
+The example uses normalized `/input/...` topics. Change its fields to match
+the actual recording, including frames and depth units.
 
-Custom mapping recipes belong in `config/mappings`; do not add model or mapper
-settings to a dataset adapter. New runtime dependencies belong in the Docker
-image and exact-SHA lock, never on the host.
+## Topics
+
+| Field | Required data |
+| --- | --- |
+| `topics.color` | RGB `sensor_msgs/msg/Image` |
+| `topics.depth` | Depth image registered to the color image |
+| `topics.camera_info` | Intrinsics for the color image |
+| `topics.tf` | Dynamic transforms, normally `/tf` |
+| `topics.tf_static` | Static transforms, normally `/tf_static` |
+| `topics.semantic` | Class-ID image (only required for recorded semantics) |
+
+Color, depth, and camera information must be synchronized closely enough for
+RGB-D reconstruction. CameraInfo must contain positive image dimensions and
+focal lengths. See the [input contract](INPUT_CONTRACT.md) for normalized names
+and message types.
+
+## Frames
+
+| Field | Meaning |
+| --- | --- |
+| `frames.map` | Global mapping frame |
+| `frames.odom` | Odometry frame |
+| `frames.robot` | Tracked body frame |
+| `frames.sensor` | Color camera optical frame |
+
+The bag must provide connected `odom → robot → sensor` transform paths.
+A recorded `map → odom` transform is optional and must not compete with another
+broadcaster. Frame names must match the recorded transforms. Renaming a frame
+in YAML does not create an extrinsic transform.
+
+## Depth and playback
+
+| Field | Meaning |
+| --- | --- |
+| `depth_encodings` | Accepted image encodings, usually `16UC1`, `32FC1`, or both |
+| `depth_scale` | Units per meter (`1000.0` for millimeters, `1.0` for meters) |
+| `playback_rate` | Bag playback speed |
+| `use_sim_time` | Simulation-time behavior |
+
+Timestamps must increase monotonically. Depth must already use color-image
+geometry. An adapter cannot register depth or generate missing poses.
+
+## Validate the adapter
+
+```bash
+make validate-bag PROFILE=core MAPPING=closed_set \
+  DATASET=/home/spark/data/custom-configs/my_sensor.yaml \
+  BAG=/home/spark/data/normalized/my_sensor
+```
+
+If the bag lacks required inputs, follow [preprocessing](PREPROCESSING.md).
+Select a [mapping recipe](DATASETS.md#mapping-recipes) independently.
+The supplied `recorded` recipe expects uHumans2 class IDs and matching remap
+files. Other datasets normally use `closed_set` or `open_set`.

@@ -1,0 +1,12 @@
+name: rtabmap_rgbd
+description: RTAB-Map frame-to-frame RGB-D visual odometry
+pose:
+  backend: rtabmap_rgbd
+  parameters:
+    Odom/Strategy: "0"
+    OdomF2M/BundleAdjustment: "1"
+    Vis/MinInliers: "15"
+synchronization:
+  approximate: true
+  queue_size: 30
+  max_interval: 0.05

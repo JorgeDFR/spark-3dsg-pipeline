@@ -15,7 +15,7 @@ make inspect DSG=/home/spark/output/run/dsg.json \
 
 Use `make dev-shell` for the complete compiler environment, pytest, or upstream
 source access. The core image retains its source and build tree. The GPU runtime
-image deliberately omits compilers, upstream source, and build objects; use the
+image deliberately omits compilers, upstream source, and build objects. Use the
 Docker builder-stage output or rebuild with progress enabled when diagnosing a
 GPU compilation failure. Use `docker image ls` and `docker image history` to
 confirm the runtime image contains only the expected final-stage layers.

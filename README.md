@@ -2,7 +2,7 @@
 
 Docker/ROS integration for building Spark-DSG scene graphs with the public
 MIT-SPARK stack. The repository owns launch, configuration, validation, and
-reproducibility glue; Hydra, Khronos, Spark-DSG, and semantic inference remain
+reproducibility glue. Hydra, Khronos, Spark-DSG, and semantic inference remain
 upstream components.
 
 Dataset adapters describe only the bag interface (topics, frames, depth, and
@@ -30,7 +30,9 @@ cp .env.example .env
 ```
 
 Download and prepare a demo bag as described in [data setup](data/README.md).
-All paths in the commands below are container paths.
+Original downloads live under `data/raw`. The canonical Spot and uHumans2 demo
+bags and contract-normalized preprocessing outputs live under
+`data/normalized`. All paths below are container paths.
 
 ## uHumans2 recorded-semantics demo
 
@@ -47,14 +49,14 @@ Validate the bag contract:
 
 ```bash
 make validate-bag PROFILE=core DATASET=uhumans2 MAPPING=recorded \
-  BAG=/home/spark/data/uhumans2
+  BAG=/home/spark/data/normalized/uhumans2
 ```
 
 Start mapping:
 
 ```bash
 make run PROFILE=core DATASET=uhumans2 MAPPING=recorded \
-  BAG=/home/spark/data/uhumans2
+  BAG=/home/spark/data/normalized/uhumans2
 ```
 
 To view the live graph with the hierarchical visualizer, run this in a second
@@ -90,7 +92,7 @@ Start mapping:
 
 ```bash
 make run PROFILE=gpu DATASET=spot MAPPING=closed_set \
-  BAG=/home/spark/data/spot
+  BAG=/home/spark/data/normalized/spot
 ```
 
 To view the live graph, run this in a second terminal:
@@ -108,7 +110,7 @@ Its recorded semantic topic is ignored in this mode. Start mapping with:
 
 ```bash
 make run PROFILE=gpu DATASET=uhumans2 MAPPING=closed_set \
-  BAG=/home/spark/data/uhumans2
+  BAG=/home/spark/data/normalized/uhumans2
 ```
 
 To view the live graph, run this in a second terminal:
@@ -151,7 +153,7 @@ Start mapping:
 
 ```bash
 make run PROFILE=gpu DATASET=spot MAPPING=open_set \
-  BAG=/home/spark/data/spot
+  BAG=/home/spark/data/normalized/spot
 ```
 
 To view the live graph, run this in a second terminal:
@@ -160,16 +162,16 @@ To view the live graph, run this in a second terminal:
 make rviz DATASET=spot MAPPING=open_set
 ```
 
-</details open>
+</details>
 
-<details>
+<details open>
 <summary><strong>uHumans2</strong></summary>
 
 Its recorded semantic topic is ignored in this mode. Start mapping with:
 
 ```bash
 make run PROFILE=gpu DATASET=uhumans2 MAPPING=open_set \
-  BAG=/home/spark/data/uhumans2
+  BAG=/home/spark/data/normalized/uhumans2
 ```
 
 To view the live graph, run this in a second terminal:
@@ -193,12 +195,18 @@ model:
 
 ```bash
 make run PROFILE=gpu DATASET=spot MAPPING=open_set \
-  BAG=/home/spark/data/spot \
-  LABELS_CONFIG=/home/spark/data/my_labels.yaml
+  BAG=/home/spark/data/normalized/spot \
+  LABELS_CONFIG=/home/spark/data/custom-configs/labels.yaml
 ```
 
-See [model setup](docs/MODELS.md) for model locations, checksums, and the
+See [model setup](models/README.md) for model locations, checksums, and the
 qualified CUDA/TensorRT/PyTorch stack.
+
+## Run your own dataset
+
+Follow the [custom dataset guide](docs/CUSTOM_DATASET.md) to validate a recording,
+preprocess it when needed, and run mapping with example or custom configurations.
+The guide covers ROS 2 bags, ROS 1 bags, SVO recordings, and open-set labels.
 
 ## Scene graph outputs and tools
 
@@ -236,35 +244,9 @@ make inspect DSG=/home/spark/output/run/dsg.json \
 Each run is written under `/home/spark/output` with `dataset.yaml`,
 `mapping.yaml`, the resolved semantic/Hydra inputs, logs, `dsg.json`,
 `dsg_with_mesh.json`, and `mesh.ply`.
-Metadata records `pipeline_version: v1` and the exact dependency-lock hash;
+Metadata records `pipeline_version: v1` and the exact dependency-lock hash.
 `v1` names only the immutable upstream snapshot in
 `dependencies/locks/v1.lock.repos`.
-
-## Additional dataset and mapping configuration
-
-`custom_rgbd` is the starting adapter for another registered RGB-D bag. Copy
-`src/spark_3dsg_pipeline/config/datasets/custom_rgbd.yaml`, then set the bag's
-color, registered-depth, camera-info, `/tf`, and `/tf_static` topics; its map,
-robot, and camera optical frames; accepted depth encoding/scale; and playback
-rate.
-The bag must provide valid camera intrinsics and connected map-to-robot
-and robot-to-sensor transforms.
-Online mappings do not require semantic images.
-
-The exact field-by-field procedure and validation command are in
-[Custom RGB-D sensor](docs/CUSTOM_SENSOR.md).
-The normalized topics and TF requirements are in the
-[input contract](docs/INPUT_CONTRACT.md).
-Keeping those details there avoids maintaining a second,
-diverging checklist in this README.
-
-Mapping recipes live separately under `src/spark_3dsg_pipeline/config/mappings`.
-Choose `MAPPING=closed_set` or `MAPPING=open_set` for a custom adapter.
-Recorded mode is appropriate only when the adapter names a compatible class-ID
-semantic topic and the mapping's Hydra label-space/remap files match those IDs.
-Mapper internals and safe overrides are documented in the
-[Hydra configuration reference](docs/HYDRA_CONFIG_REFERENCE.md) and
-[parameter tuning guide](docs/HYDRA_TUNING.md).
 
 ## Tests
 

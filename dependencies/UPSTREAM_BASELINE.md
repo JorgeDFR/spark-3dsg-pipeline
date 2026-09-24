@@ -5,7 +5,7 @@ Captured: 2026-08-27 UTC
 `v1` means only this immutable, mutually compatible set of upstream repository
 commits. It does not identify a scene-graph structure, semantic mode, or output
 acceptance contract. `locks/v1.lock.repos` is the machine-consumed source of
-truth; this file records its provenance for reviewers.
+truth. This file records its provenance for reviewers.
 
 Reference project: [MIT-SPARK/Awesome-DCIST-T4](https://github.com/MIT-SPARK/Awesome-DCIST-T4)
 

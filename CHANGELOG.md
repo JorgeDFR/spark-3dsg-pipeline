@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+- Add one optional ZED SDK preprocessing toolbox image with exact-SHA RTAB-Map,
+  experimental OpenVINS, ZED tracking, depth registration, normalized bag
+  materialization, provenance, source profiles, and corrected odometry TF
+  validation.
+- Base the preprocessing toolbox directly on the pinned ZED development image
+  so build and runtime use the same SDK installation without a second stage.
+- Add a compact public-data validation manifest and Docker-orchestrated
+  downloader, ROS 1 conversion, backend execution, output validation, and
+  resumable per-case workflow for ZED2, ZED2i, D435i, and TUM RGB-D data.
+- Materialize ROS-bag topic/frame rewrites, recorded odometry, existing TF, and
+  rectified depth registration directly with `rosbags`, avoiding ROS playback
+  and recording for deterministic preprocessing steps.
+- Derive the D435i validation frame model from its recorded TF: use
+  `camera_link` as the sensor-tree root, leave the unrelated MAVROS `base_link`
+  disconnected, recognize depth/infra1 as already registered, and attach the
+  OpenVINS bridge only at `camera_link`.
+- Reuse the preprocessing image for validation data preparation without an
+  implicit image build, and create missing ROS 2 conversion directories before
+  checking their free space.
+- Fix ZED SDK runtime-library discovery, normalize leading-slash sensor frame
+  IDs before RTAB-Map, select backend-specific D435i extrinsics, bound RGB-D
+  approximate synchronization, use the camera pose for handheld D435i visual
+  odometry, and keep optional map/odom absence informational.
+- Add an image revision and GPU-container runtime preflight so validation
+  reports a stale preprocessing image or unloadable ZED component before
+  starting any cases.
+- Standardize data into `raw` and `normalized`: keep validation downloads
+  and storage-only conversions under `raw/validation`, put Spot and
+  uHumans2 directly under `normalized`, and group final validation outputs
+  under `normalized/validation`.
+- Invoke bind-mounted Python tools through `python3` so host executable-bit
+  differences cannot break Docker preparation or validation commands.
+- Use one GPU-enabled Compose preprocessing service with a read/write mount of
+  the complete data root, complete the D435i validation TF tree, and harden
+  RTAB-Map replay startup and dependency failure handling.
 - Build the GPU image in separate CUDA development and runtime stages, retain
   only TensorRT runtime libraries and installed artifacts, and avoid the
   multi-gigabyte recursive-ownership layer.

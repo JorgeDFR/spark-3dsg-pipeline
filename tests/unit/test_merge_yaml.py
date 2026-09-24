@@ -13,7 +13,7 @@ def test_open_set_labels_overlay_does_not_modify_model_settings(tmp_path):
     subprocess.run(
         [
             sys.executable,
-            str(ROOT / "scripts/merge_yaml.py"),
+            str(ROOT / "scripts/python/merge_yaml.py"),
             str(ROOT / "src/spark_3dsg_pipeline/config/perception/yoloe.yaml"),
             str(ROOT / "src/spark_3dsg_pipeline/config/perception/labels/adt4.yaml"),
             "--output",
@@ -38,7 +38,7 @@ def test_arbitrary_labels_overlay_replaces_only_prompt(tmp_path):
     subprocess.run(
         [
             sys.executable,
-            str(ROOT / "scripts/merge_yaml.py"),
+            str(ROOT / "scripts/python/merge_yaml.py"),
             str(ROOT / "src/spark_3dsg_pipeline/config/perception/yoloe.yaml"),
             str(labels),
             "--output",

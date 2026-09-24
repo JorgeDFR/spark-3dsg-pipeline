@@ -1,0 +1,20 @@
+# NOT a direct raw-driver profile. Export depth_metric and optical calibration/TF first; see docs/CAMERA_PROFILES.md.
+name: sick_visionary_s_ap
+description: 'Visionary-S AP export template: requires metric optical-depth adapter;
+  replace SERIAL'
+input_kind: rosbag2
+topics:
+  color: /visionary_s/cam_SERIAL/rgb
+  color_camera_info: /visionary_s/cam_SERIAL/camera_info
+  depth: /visionary_s/cam_SERIAL/depth_metric
+  tf: /tf
+  tf_static: /tf_static
+frames:
+  odom: odom
+  robot: camera_frame_SERIAL
+  sensor: visionary_s_optical_frame
+depth:
+  mode: registered
+  scale: 1.0
+  accepted_encodings:
+  - 32FC1

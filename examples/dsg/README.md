@@ -4,10 +4,10 @@ These mesh-bearing Spark-DSG JSON files are small reference outputs for offline
 visualization and inspection. Both use the ADE20K full taxonomy and the
 hierarchical visualization profile.
 
-| File | Scene | SHA-256 |
-| --- | --- | --- |
-| `mit_courtyard_ade20k_full_dsg_with_mesh.json` | MIT courtyard | `cf00e8fc98ab3b0c616aba5fc12e347da8ffe8c9dcda58b162718f37970564ad` |
-| `uhumans2_office_ade20k_full_dsg_with_mesh.json` | uHumans2 office | `25aa1328301bbd2abddb86275e152b5404fa0ee53912839018febbffbd45fb7e` |
+| Scene | File |
+| --- | --- |
+| MIT courtyard | `mit_courtyard_ade20k_full_dsg_with_mesh.json` |
+| uHumans2 office | `uhumans2_office_ade20k_full_dsg_with_mesh.json` |
 
 The examples are mounted read-only at `/home/spark/examples` by Compose and are
 not copied into Docker images. For example:

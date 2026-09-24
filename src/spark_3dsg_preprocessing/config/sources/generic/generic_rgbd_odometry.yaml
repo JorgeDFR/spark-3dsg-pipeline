@@ -1,0 +1,19 @@
+name: generic_rgbd_odometry
+description: Generic registered RGB-D recording with nav_msgs/Odometry
+input_kind: rosbag2
+topics:
+  color: /camera/color/image_raw
+  color_camera_info: /camera/color/camera_info
+  depth: /camera/aligned_depth_to_color/image_raw
+  odometry: /camera/odometry
+  tf: /tf
+  tf_static: /tf_static
+frames:
+  odom: odom
+  robot: camera_link
+  sensor: camera_color_optical_frame
+depth:
+  mode: registered
+  scale: 1000.0
+  accepted_encodings:
+  - 16UC1

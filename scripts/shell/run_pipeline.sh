@@ -11,7 +11,7 @@ labels_config_override=
 skip_validation=false
 spark_home="${HOME:-/home/spark}"
 pipeline_root="${PIPELINE_ROOT:-$spark_home/spark-3dsg-pipeline}"
-dataset_config="$pipeline_root/scripts/dataset_config.py"
+dataset_config="$pipeline_root/scripts/python/dataset_config.py"
 
 while (($#)); do
   case "$1" in
@@ -46,7 +46,7 @@ scene_structure=$(config_query scene_structure)
 visualization_profile=$(config_query visualization.profile)
 
 if [[ "$skip_validation" != true ]]; then
-  python3 "$pipeline_root/scripts/validate_bag.py" \
+  python3 "$pipeline_root/scripts/python/validate_bag.py" \
     --bag "$bag" --dataset "$dataset" --mapping "$mapping"
 fi
 
@@ -168,7 +168,7 @@ cp "$labelspace_config" "$run_dir/labelspace.yaml"
 cp "$semantic_pipeline_config" "$run_dir/semantic_pipeline.yaml"
 cp "$pipeline_root/dependencies/locks/v1.lock.repos" "$run_dir/v1.lock.repos"
 if [[ "$semantics_source" == open_set ]]; then
-  python3 "$pipeline_root/scripts/merge_yaml.py" \
+  python3 "$pipeline_root/scripts/python/merge_yaml.py" \
     "$perception_config" "$labels_config" --output "$run_dir/perception.yaml"
   perception_config="$run_dir/perception.yaml"
   cp "$labels_config" "$run_dir/open_set_labels.yaml"
@@ -270,7 +270,7 @@ done
 
 bag_args=("$bag" "$dataset" "$mapping")
 [[ -n "$rate" ]] && bag_args+=("$rate")
-"$pipeline_root/scripts/run_bag.sh" "${bag_args[@]}" 2>&1 | tee "$run_dir/logs/bag.log"
+"$pipeline_root/scripts/shell/run_bag.sh" "${bag_args[@]}" 2>&1 | tee "$run_dir/logs/bag.log"
 
 # exit_after_clock normally stops the pipeline. Bound the final flush, then ask
 # for a clean interrupt so experiment serializers run.
@@ -281,7 +281,7 @@ done
 cleanup
 pipeline_pid=
 
-"$pipeline_root/scripts/save_dsg.sh" "$run_dir"
+"$pipeline_root/scripts/shell/save_dsg.sh" "$run_dir"
 
 PIPELINE_RUN_DIR="$run_dir" PIPELINE_DATASET="$dataset_name" PIPELINE_BAG="$bag" \
 PIPELINE_MAPPING="$mapping_name" \

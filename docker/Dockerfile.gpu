@@ -85,7 +85,7 @@ RUN rosdep init 2>/dev/null || true \
 WORKDIR ${ROS_WS}
 COPY dependencies/locks/v1.lock.repos /tmp/v1.lock.repos
 COPY dependencies/locks/gpu.lock.repos /tmp/gpu.lock.repos
-COPY scripts/bootstrap_dependencies.sh /tmp/bootstrap_dependencies.sh
+COPY scripts/shell/bootstrap_dependencies.sh /tmp/bootstrap_dependencies.sh
 RUN /tmp/bootstrap_dependencies.sh ${ROS_WS}/src /tmp/v1.lock.repos \
     && /tmp/bootstrap_dependencies.sh ${ROS_WS}/src /tmp/gpu.lock.repos
 
@@ -95,7 +95,7 @@ RUN apt-get update \
          --rosdistro ${ROS_DISTRO} \
     && rm -rf /var/lib/apt/lists/*
 
-COPY scripts/build_workspace.sh /tmp/build_workspace.sh
+COPY scripts/shell/build_workspace.sh /tmp/build_workspace.sh
 # A copied runtime stage cannot use an install tree whose files point back into
 # the discarded build tree, so deliberately disable colcon's symlink install.
 RUN SPARK_BUILD_TESTING=OFF SPARK_SYMLINK_INSTALL=OFF \
@@ -236,25 +236,6 @@ COPY --chown=${USER_UID}:${USER_GID} src/spark_3dsg_pipeline \
 
 COPY --chown=${USER_UID}:${USER_GID} . ${PIPELINE_ROOT}
 WORKDIR ${PIPELINE_ROOT}
-
-# Preserve the existing bind-mounted development workflow for this
-# resource-only integration package without retaining the complete upstream
-# source and build trees. Keep real install directories because ros2 launch's
-# recursive file lookup does not descend into directory symlinks; link each
-# resource file individually instead.
-RUN source_root="${ROS_WS}/src/spark_3dsg_pipeline"; \
-    install_root="${ROS_WS}/install/share/spark_3dsg_pipeline"; \
-    for directory in config launch rviz; do \
-      while IFS= read -r -d '' source_file; do \
-        relative_path="${source_file#${source_root}/}"; \
-        install_file="${install_root}/${relative_path}"; \
-        install -d -o "${USER_UID}" -g "${USER_GID}" \
-          "$(dirname "${install_file}")"; \
-        rm -f "${install_file}"; \
-        ln -s "${source_file}" "${install_file}"; \
-        chown -h "${USER_UID}:${USER_GID}" "${install_file}"; \
-      done < <(find "${source_root}/${directory}" -type f -print0); \
-    done
 
 # Re-run the important linkage and import checks against the actual runtime
 # stage rather than assuming that a successful builder also has a complete

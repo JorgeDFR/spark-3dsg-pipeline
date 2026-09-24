@@ -10,6 +10,14 @@ __pycache__/
 
 data/*
 !data/README.md
+!data/raw/
+!data/raw/.gitkeep
+!data/normalized/
+!data/normalized/.gitkeep
+data/raw/*
+!data/raw/.gitkeep
+data/normalized/*
+!data/normalized/.gitkeep
 models/*
 !models/README.md
 output/*
@@ -25,3 +33,7 @@ output/*
 *.ply
 
 TODO.md
+
+!data/custom-configs/
+data/custom-configs/*
+!data/custom-configs/.gitkeep

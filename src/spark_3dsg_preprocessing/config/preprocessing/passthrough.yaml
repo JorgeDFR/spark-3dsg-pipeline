@@ -1,0 +1,7 @@
+name: passthrough
+description: Normalize RGB-D topics while preserving an existing TF trajectory
+pose:
+  backend: existing_tf
+synchronization:
+  approximate: false
+  queue_size: 20

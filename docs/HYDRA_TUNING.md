@@ -31,9 +31,9 @@ tuning the mapper.
 
 | Parameter | Effect and tuning direction |
 | --- | --- |
-| `input.inputs.<sensor>.sensor.min_range` | Rejects depth closer than this distance. Raise it to remove invalid near-field depth; lowering it admits more close geometry. |
-| `input.inputs.<sensor>.sensor.max_range` | Rejects depth beyond this distance. Reduce it when distant depth is noisy; increasing it expands coverage and computation. |
-| `input.inputs.<sensor>.receiver.queue_size` | ROS receiver backlog. Increase only to tolerate bursts; a large queue can turn overload into latency. |
+| `input.inputs.<sensor>.sensor.min_range` | Rejects depth closer than this distance. Raise it to remove invalid near-field depth. Lowering it admits more close geometry. |
+| `input.inputs.<sensor>.sensor.max_range` | Rejects depth beyond this distance. Reduce it when distant depth is noisy. Increasing it expands coverage and computation. |
+| `input.inputs.<sensor>.receiver.queue_size` | ROS receiver backlog. Increase only to tolerate bursts. A large queue can turn overload into latency. |
 | `input.max_receiver_queue_size` | Limits queued synchronized input packets. Keeping this small favors current data over delayed processing. |
 | `map_window.max_radius_m` | Radius of the active volumetric map around the robot. A larger radius retains more local context but costs memory and processing time. |
 
@@ -48,7 +48,7 @@ and Khronos.
 | Parameter | Effect and tuning direction |
 | --- | --- |
 | `active_window.volumetric_map.voxel_size` | Main map resolution in metres. Smaller voxels preserve finer geometry and improve small-object separation, but increase memory and runtime steeply. |
-| `active_window.volumetric_map.truncation_distance` | TSDF truncation band in metres. It should span several voxels. Too small is brittle to depth noise; too large smooths surfaces and increases update work. |
+| `active_window.volumetric_map.truncation_distance` | TSDF truncation band in metres. It should span several voxels. Too small is brittle to depth noise. Too large smooths surfaces and increases update work. |
 | `active_window.volumetric_map.voxels_per_side` | Voxels per allocation block. This mainly changes allocation granularity and performance, not nominal spatial resolution. |
 | `active_window.volumetric_map.with_semantics` | Enables semantic storage for classic Hydra. Keep it enabled when mesh objects are extracted from semantic labels. |
 | `active_window.full_update_separation_s` | Classic Hydra's minimum interval between full reconstruction updates. Increase it to reduce frontend load at the cost of update latency. |
@@ -69,13 +69,13 @@ other object's centroid.
 
 | Parameter | Effect and tuning direction |
 | --- | --- |
-| `frontend.objects.cluster_tolerance` | Maximum Euclidean gap within a cluster. Increase it when one object is fragmented; decrease it when nearby same-class objects are fused. This is normally the first object parameter to tune. |
-| `frontend.objects.min_cluster_size` | Minimum mesh vertices per cluster and minimum retained active-object size. Raise it to reject small fragments; lower it when genuine small or partially observed objects disappear and reappear. |
+| `frontend.objects.cluster_tolerance` | Maximum Euclidean gap within a cluster. Increase it when one object is fragmented. Decrease it when nearby same-class objects are fused. This is normally the first object parameter to tune. |
+| `frontend.objects.min_cluster_size` | Minimum mesh vertices per cluster and minimum retained active-object size. Raise it to reject small fragments. Lower it when genuine small or partially observed objects disappear and reappear. |
 | `frontend.objects.max_cluster_size` | Rejects clusters larger than the limit. Change it only when legitimate very large objects are discarded. |
 | `frontend.objects.bounding_box_type` | Controls geometry and the centroid-in-box association gate. `RAABB` is yaw-adjusted, `AABB` is often more permissive for rotated objects, and `OBB` is tighter. More permissive boxes also increase false merges. |
 | `backend.enable_node_merging` | Must be `true` for backend merge proposals to be applied. |
 | `backend.update_functors.objects.allow_connection_merging` | Allows accepted object merges to combine their mesh connections. Its default is `true`. |
-| `backend.update_functors.objects.merge_proposer.strategy.num_merges_to_consider` | Number of nearest same-class archived candidates checked per object. The default is `1`; a small increase can help when the correct object is not nearest, but it does not relax the bounding-box test. |
+| `backend.update_functors.objects.merge_proposer.strategy.num_merges_to_consider` | Number of nearest same-class archived candidates checked per object. The default is `1`. A small increase can help when the correct object is not nearest, but it does not relax the bounding-box test. |
 
 An explicit multi-candidate configuration is:
 
@@ -105,14 +105,14 @@ backend graph merging. Tune them in that order.
 
 | Parameter | Effect and tuning direction |
 | --- | --- |
-| `active_window.object_detector.min_cluster_size` | Minimum detection size. Raise it to reject small noisy detections; lower it for small or distant objects. |
+| `active_window.object_detector.min_cluster_size` | Minimum detection size. Raise it to reject small noisy detections. Lower it for small or distant objects. |
 | `active_window.object_detector.min_range` / `max_range` | Range gate applied to object detections. Keep it within the sensor's valid depth range. |
-| `active_window.tracker.track_by` | IoU representation: `pixels`, `voxels`, or `bounding_box`. Pixels depend on image overlap; voxels depend on reliable 3D pose and `voxel_size`; bounding boxes are coarser. |
-| `active_window.tracker.min_semantic_iou` | Minimum overlap for same-semantic detection/track association. Lower it when viewpoint changes fragment tracks; raise it when neighboring objects exchange identities. |
+| `active_window.tracker.track_by` | IoU representation: `pixels`, `voxels`, or `bounding_box`. Pixels depend on image overlap. Voxels depend on reliable 3D pose and `voxel_size`. Bounding boxes are coarser. |
+| `active_window.tracker.min_semantic_iou` | Minimum overlap for same-semantic detection/track association. Lower it when viewpoint changes fragment tracks. Raise it when neighboring objects exchange identities. |
 | `active_window.tracker.min_cross_iou` | Minimum overlap between semantic and dynamic detections. It is not the primary static-object association threshold. |
-| `active_window.tracker.min_cosine_sim` | Optional semantic-feature similarity gate. Increase it to require closer feature agreement; use only when meaningful features are supplied. |
+| `active_window.tracker.min_cosine_sim` | Optional semantic-feature similarity gate. Increase it to require closer feature agreement. Use only when meaningful features are supplied. |
 | `active_window.tracker.max_dynamic_distance` | Maximum inter-frame displacement for dynamic-object association. Increase it for fast objects or low frame rates, with greater false-association risk. |
-| `active_window.tracker.min_num_observations` | Controls how quickly track confidence grows. Lower values admit short tracks sooner and increase false positives; higher values require persistence. |
+| `active_window.tracker.min_num_observations` | Controls how quickly track confidence grows. Lower values admit short tracks sooner and increase false positives. Higher values require persistence. |
 | `active_window.tracker.voxel_size` | Resolution for `track_by: voxels`. Smaller values are more precise but more sensitive to pose/depth noise and more expensive. |
 
 ### Object acceptance and reconstruction
@@ -121,14 +121,14 @@ All paths in this table are below `active_window.object_extractor`.
 
 | Parameter | Effect and tuning direction |
 | --- | --- |
-| `min_object_allocation_confidence` | Minimum track confidence for extraction. Lower it to retain shorter tracks; raise it to reject unstable tracks. |
+| `min_object_allocation_confidence` | Minimum track confidence for extraction. Lower it to retain shorter tracks. Raise it to reject unstable tracks. |
 | `min_object_volume` / `max_object_volume` | Accepted 3D volume range. Set these from expected physical object sizes. |
 | `only_extract_reconstructed_objects` | When `true`, drops objects whose reconstructed mesh is empty. This improves graph cleanliness but can remove weakly observed objects. |
-| `min_object_reconstruction_confidence` | Removes object-reconstruction voxels below this confidence. Lower it for completeness; raise it for cleaner meshes. |
-| `min_object_reconstruction_observations` | Minimum observations contributing to reconstructed object voxels. Lower it for short tracks; raise it to suppress transient geometry. |
-| `object_reconstruction_resolution` | Positive values are voxel size in metres; negative values are a fraction of object extent; zero disables static reconstruction. Smaller magnitudes give finer meshes at higher cost. |
+| `min_object_reconstruction_confidence` | Removes object-reconstruction voxels below this confidence. Lower it for completeness. Raise it for cleaner meshes. |
+| `min_object_reconstruction_observations` | Minimum observations contributing to reconstructed object voxels. Lower it for short tracks. Raise it to suppress transient geometry. |
+| `object_reconstruction_resolution` | Positive values are voxel size in metres. Negative values are a fraction of object extent. Zero disables static reconstruction. Smaller magnitudes give finer meshes at higher cost. |
 | `min_reconstruction_resolution` | Lower bound on voxel size when `object_reconstruction_resolution` is negative. It prevents small objects from producing excessively fine grids. |
-| `min_dynamic_displacement` | Minimum trajectory length for accepting a dynamic object. Lower it for slow motion; raise it to reject static/noisy tracks classified as dynamic. |
+| `min_dynamic_displacement` | Minimum trajectory length for accepting a dynamic object. Lower it for slow motion. Raise it to reject static/noisy tracks classified as dynamic. |
 | `visualize_classification` | Debugging-only reconstruction coloring. It changes pruning for visualization and should normally remain `false`. |
 
 ### Frontend and backend graph association
@@ -152,7 +152,7 @@ All paths in this table are below `active_window.object_extractor`.
 | `pure_final_place_size` | Target size used while recursively decomposing a surface region. Smaller values produce more, smaller places. |
 | `min_final_place_points` | Rejects final places with too few supporting points. Raise it to suppress small regions. |
 | `place_overlap_threshold` | Required planar overlap for connecting neighboring surface places. Raising it makes connectivity stricter. |
-| `place_max_neighbor_z_diff` | Maximum vertical difference for a surface-place edge. Lower it to prevent connections across levels; raise it for ramps or uneven surfaces. |
+| `place_max_neighbor_z_diff` | Maximum vertical difference for a surface-place edge. Lower it to prevent connections across levels. Raise it for ramps or uneven surfaces. |
 
 There is no relative-height filter in the locked `place_2d` extractor.
 
@@ -205,10 +205,10 @@ All paths in this table are below
 | `backend.pgmo.covariance.*` | Relative uncertainty of odometry, loop-closure, mesh, place, and merge factors. Lower covariance gives that factor more influence. Change these only with measured residuals and a sensor-noise model. |
 | `backend.pgmo.optimizer.gnc.*` | Robust optimization settings. They affect rejection of inconsistent constraints, not initial data association. |
 
-The repository's mapper profiles do not set `enable_lcd`; Hydra's locked default
+The repository's mapper profiles do not set `enable_lcd`. Hydra's locked default
 is `false`. Consequently, `optimize_on_lc: true` alone does not provide internal
 loop-closure detection. Enabling Hydra LCD also requires composing its detector,
-descriptor, registration, and model configuration; those parameters are outside
+descriptor, registration, and model configuration. Those parameters are outside
 the current profiles.
 
 `backend.pgmo.covariance.object_merge` is an optimization weight after an object

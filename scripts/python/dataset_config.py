@@ -47,7 +47,7 @@ def config_directory(kind: str = "datasets") -> Path:
         Path(explicit) if explicit else None,
         Path(f"/home/spark/ros_ws/install/share/spark_3dsg_pipeline/config/{kind}"),
         Path(f"/home/spark/ros_ws/src/spark_3dsg_pipeline/config/{kind}"),
-        Path(__file__).resolve().parents[1]
+        Path(__file__).resolve().parents[2]
         / f"src/spark_3dsg_pipeline/config/{kind}",
     ]
     for candidate in candidates:
@@ -60,6 +60,8 @@ def resolve_config(name_or_path: str, kind: str = "datasets") -> Path:
     requested = Path(name_or_path)
     if requested.is_file():
         return requested.resolve()
+    if requested.is_absolute() or len(requested.parts) > 1:
+        raise FileNotFoundError(f"config file not found: {requested}")
     name = requested.name
     if not name.endswith(".yaml"):
         name += ".yaml"

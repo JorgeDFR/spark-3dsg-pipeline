@@ -40,6 +40,9 @@ class Report:
         self.warnings += 1
         print(f"! {message}")
 
+    def info(self, message: str) -> None:
+        print(f"· {message}")
+
 
 def metadata_path(bag: Path) -> Path | None:
     if bag.is_dir() and (bag / "metadata.yaml").is_file():
@@ -68,13 +71,15 @@ def sample_messages(
     max_messages: int,
     required_tf_paths: tuple[tuple[str, str], ...] = (),
 ) -> tuple[dict[str, Any], set[tuple[str, str]], bool, str | None]:
-    """Read bounded samples. Failure is advisory because storage plugins vary."""
+    """Read bounded samples, preferring ROS APIs and falling back to rosbags."""
     try:
         import rosbag2_py
         from rclpy.serialization import deserialize_message
         from rosidl_runtime_py.utilities import get_message
-    except ImportError as error:
-        return {}, set(), True, f"ROS bag Python APIs unavailable: {error}"
+    except ImportError:
+        return sample_messages_with_rosbags(
+            bag, wanted, max_messages, required_tf_paths
+        )
 
     samples: dict[str, Any] = {}
     tf_edges: set[tuple[str, str]] = set()
@@ -109,6 +114,51 @@ def sample_messages(
                 break
         return samples, tf_edges, monotonic, None
     except Exception as error:  # storage/plugin failures should still yield topic checks
+        return samples, tf_edges, monotonic, str(error)
+
+
+def sample_messages_with_rosbags(
+    bag: Path,
+    wanted: set[str],
+    max_messages: int,
+    required_tf_paths: tuple[tuple[str, str], ...] = (),
+) -> tuple[dict[str, Any], set[tuple[str, str]], bool, str | None]:
+    try:
+        from rosbags.highlevel import AnyReader
+    except ImportError as error:
+        return {}, set(), True, f"ROS bag Python APIs unavailable: {error}"
+    samples: dict[str, Any] = {}
+    tf_edges: set[tuple[str, str]] = set()
+    last_stamp: dict[str, int] = {}
+    monotonic = True
+    try:
+        with AnyReader([bag]) as reader:
+            connections = [item for item in reader.connections if item.topic in wanted]
+            for count, (connection, timestamp, raw) in enumerate(
+                reader.messages(connections=connections), start=1
+            ):
+                if count > max_messages:
+                    break
+                topic = connection.topic
+                if topic in last_stamp and timestamp < last_stamp[topic]:
+                    monotonic = False
+                last_stamp[topic] = timestamp
+                message = reader.deserialize(raw, connection.msgtype)
+                samples.setdefault(topic, message)
+                if connection.msgtype == "tf2_msgs/msg/TFMessage":
+                    for transform in message.transforms:
+                        tf_edges.add(
+                            (
+                                transform.header.frame_id.lstrip("/"),
+                                transform.child_frame_id.lstrip("/"),
+                            )
+                        )
+                if wanted.issubset(samples) and tf_paths_connected(
+                    tf_edges, required_tf_paths
+                ):
+                    break
+        return samples, tf_edges, monotonic, None
+    except Exception as error:
         return samples, tf_edges, monotonic, str(error)
 
 
@@ -186,7 +236,7 @@ def main() -> int:
 
     wanted = {topics_cfg[key] for key in required}
     required_tf_paths = (
-        (frames["map"], frames["robot"]),
+        (frames["odom"], frames["robot"]),
         (frames["robot"], frames["sensor"]),
     )
     samples, tf_edges, monotonic, reader_error = sample_messages(
@@ -207,13 +257,44 @@ def main() -> int:
     camera_info = samples.get(topics_cfg["camera_info"])
     if camera_info is None:
         report.warn("CameraInfo payload not sampled")
-    elif camera_info.width <= 0 or camera_info.height <= 0 or camera_info.k[0] <= 0:
+    elif (
+        camera_info.width <= 0
+        or camera_info.height <= 0
+        or getattr(camera_info, "k", getattr(camera_info, "K", [0.0]))[0] <= 0
+    ):
         report.fail("CameraInfo has invalid dimensions/intrinsics")
     else:
         report.ok(f"CameraInfo: {camera_info.width}x{camera_info.height}")
 
+    color = samples.get(topics_cfg["color"])
+    if color is not None and depth is not None:
+        if (color.width, color.height) != (depth.width, depth.height):
+            report.fail(
+                "registered depth dimensions do not match color: "
+                f"{depth.width}x{depth.height} vs {color.width}x{color.height}"
+            )
+        else:
+            report.ok("registered depth dimensions match color")
+    if color is not None and camera_info is not None:
+        color_frame = color.header.frame_id.lstrip("/")
+        info_frame = camera_info.header.frame_id.lstrip("/")
+        if color_frame and info_frame and color_frame != info_frame:
+            report.fail(
+                f"color/CameraInfo frame mismatch: {color_frame} vs {info_frame}"
+            )
+        elif color_frame:
+            report.ok(f"color calibration frame: {color_frame}")
+    if color is not None and depth is not None:
+        color_frame = color.header.frame_id.lstrip("/")
+        depth_frame = depth.header.frame_id.lstrip("/")
+        if color_frame and depth_frame and color_frame != depth_frame:
+            report.fail(
+                f"registered depth frame differs from color: {depth_frame} vs "
+                f"{color_frame}"
+            )
+
     for source, target, label in [
-        (frames["map"], frames["robot"], "map/robot TF"),
+        (frames["odom"], frames["robot"], "odometry TF"),
         (frames["robot"], frames["sensor"], "camera optical TF"),
     ]:
         if not tf_edges:
@@ -227,6 +308,15 @@ def main() -> int:
             if len(component) > 12:
                 preview += f", ... ({len(component)} frames)"
             report.warn(f"sampled component from {source}: {preview}")
+
+    if frames["map"] != frames["odom"]:
+        if tf_edges and connected(tf_edges, frames["map"], frames["odom"]):
+            report.ok("optional map/odom TF")
+        else:
+            report.info(
+                f"optional map/odom TF not sampled ({frames['map']} -> "
+                f"{frames['odom']}); the mapper may publish it at runtime"
+            )
 
     if monotonic:
         report.ok("sampled timestamps monotonically increasing")

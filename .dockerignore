@@ -12,6 +12,15 @@ install
 log
 
 data/*
+!data/README.md
+!data/raw/
+!data/raw/.gitkeep
+!data/normalized/
+!data/normalized/.gitkeep
+data/raw/*
+!data/raw/.gitkeep
+data/normalized/*
+!data/normalized/.gitkeep
 models/*
 output/*
 examples/dsg/*.json
@@ -24,3 +33,7 @@ examples/dsg/*.json
 **/*.onnx
 **/*.engine
 **/*.ply
+
+!data/custom-configs/
+data/custom-configs/*
+!data/custom-configs/.gitkeep

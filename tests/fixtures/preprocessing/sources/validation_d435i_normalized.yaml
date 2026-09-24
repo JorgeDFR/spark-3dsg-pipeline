@@ -1,0 +1,21 @@
+name: validation_d435i_normalized
+description: Normalized D435i validation output with an existing TF trajectory
+input_kind: rosbag2
+topics:
+  color: /input/color/image_raw
+  color_camera_info: /input/color/camera_info
+  depth: /input/depth/image_rect
+  imu: /input/imu
+  odometry: /input/odometry
+  tf: /tf
+  tf_static: /tf_static
+frames:
+  odom: odom
+  robot: camera_link
+  imu: mavros_imu_frame
+  sensor: camera_infra1_optical_frame
+depth:
+  mode: registered
+  frame_id: camera_infra1_optical_frame
+  scale: 1000.0
+  accepted_encodings: [16UC1]

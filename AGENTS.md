@@ -18,17 +18,17 @@ Runtime containers must default to the non-root `spark` user created from `HOST_
 - Never put `main`, `master`, `develop`, or another floating ref in a lock file.
 - The v1 dependency lock uses a Hydra public monorepo snapshot that already contains the
   `hydra_ros` packages. Do not also import the split Hydra-ROS repository into
-  that workspace; migrate the entire compatible dependency set together.
+  that workspace. Migrate the entire compatible dependency set together.
 - Prefer launch/configuration composition over upstream source changes.
 - Any unavoidable upstream change must be an explicit patch under `patches/`, with its reason, applicable upstream commit, upstream issue/PR, and removal condition documented.
 
 ## Scope
 
 The v1 name refers only to the immutable exact-SHA dependency snapshot in
-`dependencies/locks/v1.lock.repos`; it does not identify a graph topology or
+`dependencies/locks/v1.lock.repos`. It does not identify a graph topology or
 validation mode. Required upstreams are Hydra/Hydra-ROS, Khronos, Spark-DSG,
 and semantic_inference.
 
 ## Testing and outputs
 
-Every change must leave the Docker definitions buildable, tests passing, README commands accurate, and model/bag files untracked. A successful mapping run must produce a Spark-DSG JSON file under `/home/spark/output`; tests validate graph contents programmatically and never require RViz.
+Every change must leave the Docker definitions buildable, tests passing, README commands accurate, and model/bag files untracked. A successful mapping run must produce a Spark-DSG JSON file under `/home/spark/output`.

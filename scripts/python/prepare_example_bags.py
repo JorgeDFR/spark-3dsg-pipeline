@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare known public example bags under canonical data-directory names."""
+"""Prepare known public example bags from data/raw into data/normalized."""
 
 from __future__ import annotations
 
@@ -39,6 +39,8 @@ UHUMANS2_DIRECTORIES = {
 STORAGE_SUFFIXES = {".db3", ".mcap"}
 COPY_BUFFER_SIZE = 16 * 1024 * 1024
 PROGRESS_INTERVAL = 1024 * 1024 * 1024
+RAW_DIRECTORY = "raw"
+NORMALIZED_DIRECTORY = "normalized"
 
 
 def folded(value: str) -> str:
@@ -76,6 +78,41 @@ def link_canonical(source: Path, canonical: Path) -> None:
     relative = os.path.relpath(source, canonical.parent)
     canonical.symlink_to(relative, target_is_directory=True)
     print(f"✓ {canonical.name}: linked {canonical} -> {relative}")
+
+
+def prune_legacy_demo_directories(root: Path) -> None:
+    for path in (root / "prepared" / "demos", root / "prepared"):
+        try:
+            path.rmdir()
+        except OSError:
+            pass
+
+
+def migrate_legacy_canonical(raw: Path, canonical: Path) -> None:
+    root = raw.parent
+    candidates = [
+        root / "prepared" / "demos" / canonical.name,
+        root / canonical.name,
+    ]
+    existing = [path for path in candidates if path.exists()]
+    if canonical.exists():
+        for path in existing:
+            print(f"! legacy demo remains beside normalized path: {path}")
+        prune_legacy_demo_directories(root)
+        return
+    if len(existing) > 1:
+        raise RuntimeError(
+            "multiple legacy demo paths exist; reconcile them manually: "
+            f"{', '.join(map(str, existing))}"
+        )
+    if not existing:
+        prune_legacy_demo_directories(root)
+        return
+    legacy = existing[0]
+    canonical.parent.mkdir(parents=True, exist_ok=True)
+    legacy.rename(canonical)
+    print(f"↻ migrated normalized demo: {legacy} -> {canonical}")
+    prune_legacy_demo_directories(root)
 
 
 def known_child(root: Path, names: set[str]) -> Path | None:
@@ -205,18 +242,19 @@ def zip_candidates(root: Path) -> list[Path]:
     )
 
 
-def prepare_spot(root: Path) -> bool:
-    canonical = root / SPOT_CANONICAL
+def prepare_spot(raw: Path, normalized: Path) -> bool:
+    canonical = normalized / SPOT_CANONICAL
+    migrate_legacy_canonical(raw, canonical)
     if canonical_ready(canonical):
         return True
 
-    extracted = known_child(root, SPOT_DIRECTORIES)
+    extracted = known_child(raw, SPOT_DIRECTORIES)
     if extracted and is_ros2_bag(extracted):
         link_canonical(extracted, canonical)
         return True
 
     known_archives = {folded(name) for name in SPOT_ARCHIVES}
-    for candidate in zip_candidates(root):
+    for candidate in zip_candidates(raw):
         with zipfile.ZipFile(candidate) as archive:
             members = ros2_members(
                 archive,
@@ -231,12 +269,13 @@ def prepare_spot(root: Path) -> bool:
     return False
 
 
-def prepare_uhumans2(root: Path, converter: str) -> bool:
-    canonical = root / UHUMANS2_CANONICAL
+def prepare_uhumans2(raw: Path, normalized: Path, converter: str) -> bool:
+    canonical = normalized / UHUMANS2_CANONICAL
+    migrate_legacy_canonical(raw, canonical)
     if canonical_ready(canonical):
         return True
 
-    extracted = known_child(root, UHUMANS2_DIRECTORIES)
+    extracted = known_child(raw, UHUMANS2_DIRECTORIES)
     if extracted:
         if is_ros2_bag(extracted):
             link_canonical(extracted, canonical)
@@ -246,13 +285,13 @@ def prepare_uhumans2(root: Path, converter: str) -> bool:
             convert_ros1(source, canonical, converter)
             return True
 
-    source = known_child(root, UHUMANS2_ROS1_FILES)
+    source = known_child(raw, UHUMANS2_ROS1_FILES)
     if source and source.is_file():
         convert_ros1(source, canonical, converter)
         return True
 
     known_archives = {folded(name) for name in UHUMANS2_ARCHIVES}
-    for candidate in zip_candidates(root):
+    for candidate in zip_candidates(raw):
         archive_is_known = candidate.name.casefold() in known_archives
         with zipfile.ZipFile(candidate) as archive:
             members = ros2_members(
@@ -287,13 +326,17 @@ def main() -> int:
     if not root.is_dir():
         print(f"data directory does not exist: {root}", file=sys.stderr)
         return 2
+    raw = root / RAW_DIRECTORY
+    normalized = root / NORMALIZED_DIRECTORY
+    raw.mkdir(exist_ok=True)
+    normalized.mkdir(exist_ok=True)
 
     try:
         results: list[bool] = []
         if args.dataset in {"all", "spot"}:
-            results.append(prepare_spot(root))
+            results.append(prepare_spot(raw, normalized))
         if args.dataset in {"all", "uhumans2"}:
-            results.append(prepare_uhumans2(root, args.converter))
+            results.append(prepare_uhumans2(raw, normalized, args.converter))
     except (OSError, RuntimeError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
         print(f"data preparation failed: {error}", file=sys.stderr)
         return 1

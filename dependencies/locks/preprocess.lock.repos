@@ -1,0 +1,25 @@
+repositories:
+  open_vins:
+    type: git
+    url: https://github.com/nathanshankar/open_vins.git
+    version: 0bd027a997f3ca911b3df504d20b00b60f371b31
+  rtabmap:
+    type: git
+    url: https://github.com/introlab/rtabmap.git
+    version: cbbe7a6b8290488ea8867bf9f0b6a9fb690390ff
+  rtabmap_ros:
+    type: git
+    url: https://github.com/introlab/rtabmap_ros.git
+    version: ba1f0bf1671a2acefa3ba90f43f591f118bb494e
+  zed_ros2_description:
+    type: git
+    url: https://github.com/stereolabs/zed-ros2-description.git
+    version: 449eef9566a49461cc37d6ac13230fe2886ff2be
+  zed_ros2_interfaces:
+    type: git
+    url: https://github.com/stereolabs/zed-ros2-interfaces.git
+    version: e97008721d56ecf3733b95265ff4deaddf3f664e
+  zed_ros2_wrapper:
+    type: git
+    url: https://github.com/stereolabs/zed-ros2-wrapper.git
+    version: 86171bccda22de6e83ccc69b3c0e67af99dece7c

@@ -1,0 +1,21 @@
+name: realsense_d455
+description: RealSense D455 with enabled, combined accel/gyro
+input_kind: rosbag2
+topics:
+  color: /camera/camera/color/image_raw
+  color_camera_info: /camera/camera/color/camera_info
+  depth: /camera/camera/aligned_depth_to_color/image_raw
+  depth_camera_info: /camera/camera/aligned_depth_to_color/camera_info
+  tf: /tf
+  tf_static: /tf_static
+  imu: /camera/camera/imu
+frames:
+  odom: odom
+  robot: camera_link
+  sensor: camera_color_optical_frame
+  imu: camera_imu_optical_frame
+depth:
+  mode: registered
+  scale: 1000.0
+  accepted_encodings:
+  - 16UC1

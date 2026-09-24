@@ -1,0 +1,28 @@
+name: validation_d435i
+description: Short public D435i validation bag using native left-IR depth geometry
+input_kind: rosbag2
+topics:
+  color: /camera/infra1/image_rect_raw
+  color_camera_info: /camera/infra1/camera_info
+  color_right: /camera/infra2/image_rect_raw
+  depth: /camera/depth/image_rect_raw
+  depth_camera_info: /camera/depth/camera_info
+  imu: /mavros/imu/data
+  odometry: /fusion_odometry/lazy_point_odom
+  tf: /tf
+  tf_static: /tf_static
+frames:
+  odom: odom
+  robot: camera_link
+  imu: mavros_imu_frame
+  sensor: camera_infra1_optical_frame
+depth:
+  mode: registered
+  scale: 1000.0
+  accepted_encodings: [16UC1]
+static_transforms:
+  - parent: mavros_imu_frame
+    child: camera_link
+    translation: [0.05222201, 0.0146902, -0.11623093]
+    rotation: [-0.00335695, 0.00522860, 0.00103553, 0.99998016]
+    backends: [openvins]

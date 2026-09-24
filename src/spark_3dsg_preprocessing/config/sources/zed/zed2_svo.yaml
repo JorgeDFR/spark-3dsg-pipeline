@@ -1,0 +1,25 @@
+name: zed2_svo
+description: zed2 SVO/SVO2 playback
+input_kind: zed_svo
+topics:
+  color: /zed/zed_node/rgb/color/rect/image
+  color_camera_info: /zed/zed_node/rgb/color/rect/camera_info
+  color_right: /zed/zed_node/right/color/rect/image
+  depth: /zed/zed_node/depth/depth_registered
+  imu: /zed/zed_node/imu/data
+  tf: /tf
+  tf_static: /tf_static
+frames:
+  odom: odom
+  robot: zed_camera_link
+  imu: zed_imu_link
+  sensor: zed_left_camera_frame_optical
+depth:
+  mode: registered
+  scale: 1.0
+  accepted_encodings:
+  - 32FC1
+zed:
+  camera_model: zed2
+  camera_name: zed
+  legacy_svo: false

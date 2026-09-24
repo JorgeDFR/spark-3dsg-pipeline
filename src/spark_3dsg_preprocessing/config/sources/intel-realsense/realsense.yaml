@@ -1,0 +1,20 @@
+# Enable align_depth.enable; no native odometry. See docs/CAMERA_PROFILES.md.
+name: realsense
+description: RealSense ROS 2 aligned RGB-D; camera_namespace=camera, camera_name=camera
+input_kind: rosbag2
+topics:
+  color: /camera/camera/color/image_raw
+  color_camera_info: /camera/camera/color/camera_info
+  depth: /camera/camera/aligned_depth_to_color/image_raw
+  depth_camera_info: /camera/camera/aligned_depth_to_color/camera_info
+  tf: /tf
+  tf_static: /tf_static
+frames:
+  odom: odom
+  robot: camera_link
+  sensor: camera_color_optical_frame
+depth:
+  mode: registered
+  scale: 1000.0
+  accepted_encodings:
+  - 16UC1

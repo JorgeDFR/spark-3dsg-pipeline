@@ -6,7 +6,7 @@ mapping=
 dsg=
 profile=
 pipeline_root="${PIPELINE_ROOT:-/home/spark/spark-3dsg-pipeline}"
-dataset_config="$pipeline_root/scripts/dataset_config.py"
+dataset_config="$pipeline_root/scripts/python/dataset_config.py"
 
 while (($#)); do
   case "$1" in

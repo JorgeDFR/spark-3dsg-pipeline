@@ -1,0 +1,7 @@
+name: recorded_odometry
+description: Convert recorded nav_msgs/Odometry into normalized TF
+pose:
+  backend: recorded_odometry
+synchronization:
+  approximate: false
+  queue_size: 20

@@ -1,0 +1,10 @@
+name: openvins_stereo
+description: Experimental OpenVINS stereo-IMU odometry
+pose:
+  backend: openvins
+  calibration: /home/spark/data/calibration/openvins/estimator_config.yaml
+  max_cameras: 2
+  verbosity: INFO
+synchronization:
+  approximate: false
+  queue_size: 100

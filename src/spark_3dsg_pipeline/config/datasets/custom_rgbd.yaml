@@ -1,9 +1,9 @@
 name: custom_rgbd
-description: Generic RGB-D bag input
+description: Example normalized RGB-D input (adapt frames and depth units to your recording)
 topics:
-  color: /camera/color/image_raw
-  depth: /camera/aligned_depth_to_color/image_raw
-  camera_info: /camera/color/camera_info
+  color: /input/color/image_raw
+  depth: /input/depth/image_rect
+  camera_info: /input/color/camera_info
   tf: /tf
   tf_static: /tf_static
 frames:

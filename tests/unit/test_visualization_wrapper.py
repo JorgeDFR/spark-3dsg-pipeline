@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-WRAPPER = ROOT / "scripts/run_visualization.sh"
+WRAPPER = ROOT / "scripts/shell/run_visualization.sh"
 
 
 def fake_ros_environment(tmp_path):

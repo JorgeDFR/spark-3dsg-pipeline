@@ -44,7 +44,7 @@ RUN rosdep init 2>/dev/null || true \
 
 WORKDIR ${ROS_WS}
 COPY dependencies/locks/v1.lock.repos /tmp/v1.lock.repos
-COPY scripts/bootstrap_dependencies.sh /tmp/bootstrap_dependencies.sh
+COPY scripts/shell/bootstrap_dependencies.sh /tmp/bootstrap_dependencies.sh
 RUN /tmp/bootstrap_dependencies.sh ${ROS_WS}/src /tmp/v1.lock.repos
 
 # Keeping the local package in a separate layer lets edits rebuild only the
@@ -55,14 +55,14 @@ RUN apt-get update \
          --rosdistro ${ROS_DISTRO} \
     && rm -rf /var/lib/apt/lists/*
 
-COPY scripts/build_workspace.sh /tmp/build_workspace.sh
+COPY scripts/shell/build_workspace.sh /tmp/build_workspace.sh
 RUN SPARK_BUILD_TESTING=OFF SPARK_SYMLINK_INSTALL=ON \
     /tmp/build_workspace.sh ${ROS_WS}
 
 WORKDIR ${PIPELINE_ROOT}
 COPY . ${PIPELINE_ROOT}
 
-RUN chmod +x docker/*.sh scripts/*.sh scripts/*.py \
+RUN chmod +x docker/*.sh scripts/shell/*.sh scripts/python/*.py \
     && python3 -m venv --system-site-packages "${DATA_TOOLS_ENV}" \
     && "${DATA_TOOLS_ENV}/bin/pip" install --no-cache-dir --upgrade pip \
     && "${DATA_TOOLS_ENV}/bin/pip" install --no-cache-dir \

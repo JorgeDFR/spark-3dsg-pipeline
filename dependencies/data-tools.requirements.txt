@@ -1,2 +1,3 @@
 # Conversion tooling for preparing the public ROS bag examples.
 rosbags==0.11.5
+numpy==1.26.4

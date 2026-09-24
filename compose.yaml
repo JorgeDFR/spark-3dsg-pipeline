@@ -11,14 +11,34 @@ x-common: &common
     - ${MODEL_DIR:-./models}:/home/spark/models
     - ${OUTPUT_DIR:-./output}:/home/spark/output
     - ./examples:/home/spark/examples:ro
-    - ${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:/home/spark/ros_ws/src/spark_3dsg_pipeline:ro
     - spark-cache:/home/spark/.cache
-    - ./scripts:/home/spark/spark-3dsg-pipeline/scripts:ro
   working_dir: /home/spark/spark-3dsg-pipeline
   stdin_open: true
   tty: true
 
 services:
+  preprocess:
+    <<: *common
+    profiles: [preprocess]
+    image: spark-3dsg-preprocess:local
+    environment:
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
+      RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+      NVIDIA_DRIVER_CAPABILITIES: all
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.preprocess
+      args:
+        USER_UID: ${HOST_UID:-1000}
+        USER_GID: ${HOST_GID:-1000}
+    volumes:
+      - ${DATA_DIR:-./data}:/home/spark/data
+      - ${OUTPUT_DIR:-./output}:/home/spark/output
+      # Docker initializes new volumes from the spark-owned image directories.
+      - zed-settings:/usr/local/zed/settings
+      - zed-resources:/usr/local/zed/resources
+    gpus: all
+
   core:
     <<: *common
     profiles: [core]
@@ -65,7 +85,7 @@ services:
     volumes:
       - ${DATA_DIR:-./data}:/home/spark/data
     working_dir: /home/spark/spark-3dsg-pipeline
-    command: ["/home/spark/spark-3dsg-pipeline/scripts/prepare_example_bags.py"]
+    command: ["python3", "/home/spark/spark-3dsg-pipeline/scripts/python/prepare_example_bags.py"]
 
   rviz:
     <<: *common
@@ -87,11 +107,11 @@ services:
       - ${MODEL_DIR:-./models}:/home/spark/models
       - ${OUTPUT_DIR:-./output}:/home/spark/output
       - ./examples:/home/spark/examples:ro
-      - ${PACKAGE_SOURCE_DIR:-./src/spark_3dsg_pipeline}:/home/spark/ros_ws/src/spark_3dsg_pipeline:ro
       - spark-cache:/home/spark/.cache
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - ./scripts:/home/spark/spark-3dsg-pipeline/scripts:ro
-    command: ["/home/spark/spark-3dsg-pipeline/scripts/run_visualization.sh", "--dataset", "spot", "--mapping", "open_set"]
+    command: ["/home/spark/spark-3dsg-pipeline/scripts/shell/run_visualization.sh", "--dataset", "spot", "--mapping", "open_set"]
 
 volumes:
   spark-cache:
+  zed-settings:
+  zed-resources:
