@@ -147,10 +147,10 @@ def test_preprocessing_dataset_manifest_is_small_exact_and_https():
                 "test-preprocess",
             )
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-    assert "prepare-preprocess-data:" in makefile
+    assert "prepare-preprocess-fixtures:" in makefile
     assert "test-preprocess:" in makefile
     preprocessing_target = makefile.split(
-        "prepare-preprocess-data: ##", 1
+        "prepare-preprocess-fixtures: ##", 1
     )[1].split("test-preprocess: ##", 1)[0]
     assert "preprocess" in preprocessing_target
     assert "--build" not in preprocessing_target
@@ -546,7 +546,7 @@ def test_gpu_stack_is_exact_and_python_is_self_contained():
     assert "CUDA 13.0" in baseline
     assert "pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime" in baseline
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-    assert "gpu-smoke:" in makefile
+    assert "check-gpu:" in makefile
     assert "scripts/shell/gpu_smoke_test.sh" in makefile
     smoke = (ROOT / "scripts/shell/gpu_smoke_test.sh").read_text(encoding="utf-8")
     assert 'model.set_classes(["chair", "table"])' in smoke
@@ -555,27 +555,32 @@ def test_gpu_stack_is_exact_and_python_is_self_contained():
 def test_compose_reuses_core_image_and_builds_gpu_independently():
     compose = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
     assert "core-builder" not in compose["services"]
-    for service in ("core", "core-dev", "data-setup", "rviz"):
+    assert "core-dev" not in compose["services"]
+    for service in ("core", "data-setup", "rviz"):
         assert compose["services"][service]["image"] == "spark-3dsg-core:local"
         assert "target" not in compose["services"][service]["build"]
-    assert compose["services"]["pipeline"]["image"] == "spark-3dsg-gpu:local"
-    assert compose["services"]["pipeline"]["build"]["dockerfile"] == (
+    assert compose["services"]["gpu"]["image"] == "spark-3dsg-gpu:local"
+    assert compose["services"]["gpu"]["build"]["dockerfile"] == (
         "docker/Dockerfile.gpu"
     )
-    assert "target" not in compose["services"]["pipeline"]["build"]
+    assert "target" not in compose["services"]["gpu"]["build"]
     assert "gpus" not in compose["services"]["rviz"]
-    assert compose["services"]["pipeline"]["gpus"] == "all"
+    assert compose["services"]["gpu"]["gpus"] == "all"
+    assert "spark-cache" not in compose.get("volumes", {})
     for service in compose["services"].values():
         for volume in service.get("volumes", []):
             assert "/ros_ws/src/" not in volume
             assert "/spark-3dsg-pipeline/scripts" not in volume
 
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-    assert "--profile dev run --rm --build core-dev" in makefile
+    assert "--profile core run --rm --build core" in makefile
     assert "--profile rviz run --rm rviz" in makefile
-    build_target = makefile.split("build: ##", 1)[1].split("models: ##", 1)[0]
+    build_target = makefile.split("build: ##", 1)[1].split("convert-ros1: ##", 1)[0]
     gpu_build = build_target.split("else ifeq ($(PROFILE),gpu)", 1)[1].split(
-        "endif", 1
+        "else ifeq ($(PROFILE),preprocess)", 1
     )[0]
-    assert "build pipeline" in gpu_build
+    assert "build gpu" in gpu_build
     assert "build core" not in gpu_build
+    assert "--profile preprocess build preprocess" in build_target
+    assert "build core gpu preprocess" in build_target
+    assert "--profile gpu run --rm gpu" in makefile

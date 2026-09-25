@@ -2,7 +2,7 @@
 set -euo pipefail
 
 model="${HOME:-/home/spark}/models/semantic_inference/yoloe-26m-seg.pt"
-[[ -f "$model" ]] || { echo "missing model: $model (run make models PROFILE=gpu)" >&2; exit 2; }
+[[ -f "$model" ]] || { echo "missing model: $model (run make download-models)" >&2; exit 2; }
 
 python3 - "$model" <<'PY'
 import sys

@@ -140,7 +140,7 @@ def test_runtime_validation_reports_closed_set_components(tmp_path):
     assert "semantic-inference model config not found" in message
     assert "semantic-inference grouping not found" in message
     assert "Hydra label-space config not found" in message
-    assert "make models PROFILE=gpu" in message
+    assert "make download-models" in message
 
 
 def test_runtime_validation_accepts_complete_open_set_resources(tmp_path):

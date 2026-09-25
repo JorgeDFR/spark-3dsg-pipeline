@@ -9,7 +9,7 @@ Build the GPU image using the [README instructions](../README.md#open-set-demo),
 then download and verify both models:
 
 ```bash
-make models PROFILE=gpu
+make download-models
 ```
 
 The downloader verifies fixed SHA-256 hashes and reuses files that already

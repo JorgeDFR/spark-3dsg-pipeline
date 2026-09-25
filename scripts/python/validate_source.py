@@ -93,7 +93,10 @@ def validate_svo(path: Path) -> list[str]:
     library = ZED_LIBRARY
     try:
         if not library.is_file():
-            return [f"ZED SDK file missing or broken symlink: {library}; rebuild with make build-preprocess"]
+            return [
+                f"ZED SDK file missing or broken symlink: {library}; "
+                "rebuild with make build PROFILE=preprocess"
+            ]
         # stat alone does not prove that the library can be read by spark.
         with library.open("rb") as stream:
             stream.read(1)
@@ -102,7 +105,7 @@ def validate_svo(path: Path) -> list[str]:
             f"cannot access ZED SDK at {library}: {error}. "
             "The runtime spark user needs read access to the SDK files and "
             "traversal access to their parent directories. Rebuild with "
-            "make build-preprocess to apply the SDK permissions fix."
+            "make build PROFILE=preprocess to apply the SDK permissions fix."
         ]
     try:
         ctypes.CDLL(str(library))

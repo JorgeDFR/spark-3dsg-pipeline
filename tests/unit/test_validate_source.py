@@ -63,7 +63,7 @@ def test_svo_reports_sdk_directory_permission_without_traceback(monkeypatch, tmp
     assert len(errors) == 1
     assert "cannot access ZED SDK" in errors[0]
     assert "traversal access" in errors[0]
-    assert "make build-preprocess" in errors[0]
+    assert "make build PROFILE=preprocess" in errors[0]
 
 
 def test_svo_reports_unreadable_sdk_file_before_loading(monkeypatch, tmp_path):

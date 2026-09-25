@@ -11,12 +11,71 @@ x-common: &common
     - ${MODEL_DIR:-./models}:/home/spark/models
     - ${OUTPUT_DIR:-./output}:/home/spark/output
     - ./examples:/home/spark/examples:ro
-    - spark-cache:/home/spark/.cache
   working_dir: /home/spark/spark-3dsg-pipeline
   stdin_open: true
   tty: true
 
 services:
+  core:
+    <<: *common
+    profiles: [core]
+    image: spark-3dsg-core:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.core
+      args:
+        USER_UID: ${HOST_UID:-1000}
+        USER_GID: ${HOST_GID:-1000}
+
+  gpu:
+    <<: *common
+    profiles: [gpu]
+    image: spark-3dsg-gpu:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gpu
+      args:
+        USER_UID: ${HOST_UID:-1000}
+        USER_GID: ${HOST_GID:-1000}
+    gpus: all
+
+  rviz:
+    <<: *common
+    profiles: [rviz]
+    image: spark-3dsg-core:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.core
+      args:
+        USER_UID: ${HOST_UID:-1000}
+        USER_GID: ${HOST_GID:-1000}
+    environment:
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
+      RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+      DISPLAY: ${DISPLAY:-:0}
+      QT_X11_NO_MITSHM: "1"
+    volumes:
+      - ${DATA_DIR:-./data}:/home/spark/data:ro
+      - ${MODEL_DIR:-./models}:/home/spark/models
+      - ${OUTPUT_DIR:-./output}:/home/spark/output
+      - ./examples:/home/spark/examples:ro
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    command: ["/home/spark/spark-3dsg-pipeline/scripts/shell/run_visualization.sh", "--dataset", "spot", "--mapping", "open_set"]
+
+  data-setup:
+    profiles: [tools]
+    image: spark-3dsg-core:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.core
+      args:
+        USER_UID: ${HOST_UID:-1000}
+        USER_GID: ${HOST_GID:-1000}
+    volumes:
+      - ${DATA_DIR:-./data}:/home/spark/data
+    working_dir: /home/spark/spark-3dsg-pipeline
+    command: ["python3", "/home/spark/spark-3dsg-pipeline/scripts/python/prepare_example_bags.py"]
+
   preprocess:
     <<: *common
     profiles: [preprocess]
@@ -39,79 +98,6 @@ services:
       - zed-resources:/usr/local/zed/resources
     gpus: all
 
-  core:
-    <<: *common
-    profiles: [core]
-    image: spark-3dsg-core:local
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.core
-      args:
-        USER_UID: ${HOST_UID:-1000}
-        USER_GID: ${HOST_GID:-1000}
-
-  core-dev:
-    <<: *common
-    profiles: [dev]
-    image: spark-3dsg-core:local
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.core
-      args:
-        USER_UID: ${HOST_UID:-1000}
-        USER_GID: ${HOST_GID:-1000}
-
-  pipeline:
-    <<: *common
-    profiles: [gpu]
-    image: spark-3dsg-gpu:local
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.gpu
-      args:
-        USER_UID: ${HOST_UID:-1000}
-        USER_GID: ${HOST_GID:-1000}
-    gpus: all
-
-  data-setup:
-    profiles: [tools]
-    image: spark-3dsg-core:local
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.core
-      args:
-        USER_UID: ${HOST_UID:-1000}
-        USER_GID: ${HOST_GID:-1000}
-    volumes:
-      - ${DATA_DIR:-./data}:/home/spark/data
-    working_dir: /home/spark/spark-3dsg-pipeline
-    command: ["python3", "/home/spark/spark-3dsg-pipeline/scripts/python/prepare_example_bags.py"]
-
-  rviz:
-    <<: *common
-    profiles: [rviz]
-    image: spark-3dsg-core:local
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.core
-      args:
-        USER_UID: ${HOST_UID:-1000}
-        USER_GID: ${HOST_GID:-1000}
-    environment:
-      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
-      RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
-      DISPLAY: ${DISPLAY:-:0}
-      QT_X11_NO_MITSHM: "1"
-    volumes:
-      - ${DATA_DIR:-./data}:/home/spark/data:ro
-      - ${MODEL_DIR:-./models}:/home/spark/models
-      - ${OUTPUT_DIR:-./output}:/home/spark/output
-      - ./examples:/home/spark/examples:ro
-      - spark-cache:/home/spark/.cache
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    command: ["/home/spark/spark-3dsg-pipeline/scripts/shell/run_visualization.sh", "--dataset", "spot", "--mapping", "open_set"]
-
 volumes:
-  spark-cache:
   zed-settings:
   zed-resources:

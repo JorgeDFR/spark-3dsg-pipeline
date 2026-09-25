@@ -130,7 +130,7 @@ if [[ "$semantics_source" == closed_set ]]; then
   labelspace_name=$(config_query semantics.labelspace_name)
   for requirement in "$model_file" "$model_config" "$grouping_config"; do
     [[ -f "$requirement" ]] || {
-      echo "closed-set resource not found: $requirement; run make models PROFILE=gpu and verify the v1 dependency snapshot" >&2
+      echo "closed-set resource not found: $requirement; run make download-models and verify the v1 dependency snapshot" >&2
       exit 2
     }
   done
@@ -144,7 +144,7 @@ elif [[ "$semantics_source" == open_set ]]; then
   fi
   for requirement in "$perception_config" "$labels_config" "$spark_home/models/semantic_inference/yoloe-26m-seg.pt"; do
     [[ -f "$requirement" ]] || {
-      echo "open-set resource not found: $requirement; run make models PROFILE=gpu or fix --labels-config" >&2
+      echo "open-set resource not found: $requirement; run make download-models or fix --labels-config" >&2
       exit 2
     }
   done

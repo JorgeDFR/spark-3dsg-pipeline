@@ -9,7 +9,7 @@ installed as package source profiles.
 From the repository root, after configuring `.env` as described in the repository README:
 
 ```bash
-make build-preprocess
+make build PROFILE=preprocess
 ```
 
 ```bash
@@ -106,7 +106,7 @@ python3 scripts/python/run_preprocessing_tests.py --list
 
 ```bash
 # Download/convert only. Never builds the image implicitly.
-make prepare-preprocess-data
+make prepare-preprocess-fixtures
 ```
 
 ```bash

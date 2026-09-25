@@ -94,7 +94,7 @@ Always run `make validate-bag ...` before a long mapping run.
 
 ## Optional preprocessing tests
 
-`make build-preprocess` followed by `make test-preprocess` downloads and
+`make build PROFILE=preprocess` followed by `make test-preprocess` downloads and
 checks approximately 1.25 GiB of ZED2 Lake, UoSM ZED2i, D435i and TUM RGB-D data.
 These fixtures are separate from the mapping examples. See the
 [test fixture guide](../tests/fixtures/preprocessing/README.md) for cache paths,

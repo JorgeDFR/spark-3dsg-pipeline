@@ -100,7 +100,7 @@ make build PROFILE=gpu
 ```
 
 ```bash
-make models PROFILE=gpu
+make download-models
 ```
 
 Choose a supplied mapping recipe:

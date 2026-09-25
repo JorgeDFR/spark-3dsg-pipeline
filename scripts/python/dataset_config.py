@@ -298,7 +298,7 @@ def validate_runtime_resources(
         raise FileNotFoundError(
             "pipeline resources are incomplete:\n  - "
             + "\n  - ".join(missing)
-            + "\nRun 'make models PROFILE=gpu' for model weights and verify the v1 dependency snapshot is built."
+            + "\nRun 'make download-models' for model weights and verify the v1 dependency snapshot is built."
         )
     return resolved
 

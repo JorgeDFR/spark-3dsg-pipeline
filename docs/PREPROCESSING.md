@@ -10,7 +10,7 @@ into the image camera, either by the acquisition driver or during preprocessing.
 Configure `.env` following the [README](../README.md), then run:
 
 ```bash
-make build-preprocess
+make build PROFILE=preprocess
 ```
 
 All bag processing and ROS execution run as `spark` in the optional `preprocess`
@@ -117,9 +117,8 @@ recorded topics and does not generate missing odometry or register depth.
 The destination must not already exist.
 
 ```bash
-docker compose --profile preprocess run --rm preprocess \
-  rosbags-convert --src /home/spark/data/raw/session.bag \
-  --dst /home/spark/data/raw/session_ros2
+make convert-ros1 INPUT=/home/spark/data/raw/session.bag \
+  ROS2_BAG=/home/spark/data/raw/session_ros2
 ```
 
 Adapt a ROS 2 source example to the converted topics and frames, then use

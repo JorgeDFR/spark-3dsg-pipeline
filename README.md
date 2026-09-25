@@ -34,6 +34,12 @@ Original downloads live under `data/raw`. The canonical Spot and uHumans2 demo
 bags and contract-normalized preprocessing outputs live under
 `data/normalized`. All paths below are container paths.
 
+Run `make help` for the command list. `make build` builds the core image by
+default; select `PROFILE=gpu`, `PROFILE=preprocess`, or `PROFILE=all` to build
+another image or all three. `make shell PROFILE=core` opens the core image;
+choose `PROFILE=gpu` or `PROFILE=preprocess` for the others. Add `BUILD=1` to
+rebuild the selected image first. `make check-compose` validates Compose settings.
+
 ## uHumans2 recorded-semantics demo
 
 This CPU demo uses the semantic class-ID images already stored in uHumans2.
@@ -80,7 +86,7 @@ make build PROFILE=gpu
 Download the model weights:
 
 ```bash
-make models PROFILE=gpu
+make download-models
 ```
 
 Choose the dataset below. uHumans2 is expanded by default.
@@ -141,7 +147,7 @@ make build PROFILE=gpu
 Download the model weights:
 
 ```bash
-make models PROFILE=gpu
+make download-models
 ```
 
 Choose the dataset below. uHumans2 is expanded by default.

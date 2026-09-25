@@ -42,8 +42,8 @@ independent CUDA or PyTorch override.
 After building on another GPU, run:
 
 ```bash
-make models PROFILE=gpu
-make gpu-smoke
+make download-models
+make check-gpu
 ```
 
 The smoke test checks the installed versions, CUDA availability, device name,
