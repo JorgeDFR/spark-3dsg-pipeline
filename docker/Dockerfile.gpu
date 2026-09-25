@@ -7,13 +7,11 @@
 ARG CUDA_IMAGE=nvidia/cuda:12.8.1-devel-ubuntu24.04
 ARG CUDA_RUNTIME_IMAGE=nvidia/cuda:12.8.1-runtime-ubuntu24.04
 
-FROM ${CUDA_IMAGE} AS builder
+FROM ${CUDA_IMAGE} AS build-base
 
 ARG DEBIAN_FRONTEND=noninteractive
+ARG TARGETARCH
 ARG TENSORRT_VERSION=10.9.0.34-1+cuda12.8
-ARG TORCH_VERSION=2.7.0
-ARG TORCHVISION_VERSION=0.22.0
-ARG PYTORCH_INDEX=https://download.pytorch.org/whl/cu128
 
 ENV ROS_DISTRO=jazzy \
     ROS_WS=/home/spark/ros_ws \
@@ -28,7 +26,10 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # ROS 2 Jazzy targets Ubuntu 24.04, so install it directly on NVIDIA's
 # matching CUDA image.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,id=apt-gpu-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-gpu-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
       gnupg2 \
@@ -40,15 +41,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
          -o /usr/share/keyrings/ros-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu noble main" \
-         > /etc/apt/sources.list.d/ros2.list \
-    && rm -rf /var/lib/apt/lists/*
+         > /etc/apt/sources.list.d/ros2.list
 
 ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
 # Development packages remain confined to this stage. The final stage installs
 # the corresponding runtime libraries independently.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,id=apt-gpu-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-gpu-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update && apt-get install -y --no-install-recommends \
       build-essential \
       git \
       libcli11-dev \
@@ -76,12 +79,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       "libnvonnxparsers-dev=${TENSORRT_VERSION}" \
     && test "$(dpkg-query -W -f='${Version}' libnvinfer-dev)" = \
          "${TENSORRT_VERSION}" \
-    && nvcc --version | grep -F 'release 12.8' \
-    && rm -rf /var/lib/apt/lists/*
+    && nvcc --version | grep -F 'release 12.8'
 
 RUN rosdep init 2>/dev/null || true \
     && rosdep update --rosdistro ${ROS_DISTRO}
 
+FROM build-base AS sources
 WORKDIR ${ROS_WS}
 COPY dependencies/locks/v1.lock.repos /tmp/v1.lock.repos
 COPY dependencies/locks/gpu.lock.repos /tmp/gpu.lock.repos
@@ -89,11 +92,14 @@ COPY scripts/shell/bootstrap_dependencies.sh /tmp/bootstrap_dependencies.sh
 RUN /tmp/bootstrap_dependencies.sh ${ROS_WS}/src /tmp/v1.lock.repos \
     && /tmp/bootstrap_dependencies.sh ${ROS_WS}/src /tmp/gpu.lock.repos
 
-COPY src/spark_3dsg_pipeline src/spark_3dsg_pipeline
-RUN apt-get update \
-    && rosdep install --from-paths src --ignore-src -r -y \
-         --rosdistro ${ROS_DISTRO} \
-    && rm -rf /var/lib/apt/lists/*
+FROM sources AS builder
+RUN --mount=type=cache,id=apt-gpu-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-gpu-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=bind,source=src/spark_3dsg_pipeline/package.xml,target=/tmp/local_package/package.xml \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update \
+    && rosdep install --from-paths src /tmp/local_package --ignore-src -r -y \
+         --rosdistro ${ROS_DISTRO}
 
 COPY scripts/shell/build_workspace.sh /tmp/build_workspace.sh
 # A copied runtime stage cannot use an install tree whose files point back into
@@ -101,6 +107,12 @@ COPY scripts/shell/build_workspace.sh /tmp/build_workspace.sh
 RUN SPARK_BUILD_TESTING=OFF SPARK_SYMLINK_INSTALL=OFF \
     SPARK_SEMANTIC_INFERENCE_USE_TRT=ON \
     /tmp/build_workspace.sh ${ROS_WS}
+
+# Install the small local package after the locked upstream build.
+COPY src/spark_3dsg_pipeline src/spark_3dsg_pipeline
+RUN SPARK_BUILD_TESTING=OFF SPARK_SYMLINK_INSTALL=OFF \
+    SPARK_SEMANTIC_INFERENCE_USE_TRT=ON \
+    /tmp/build_workspace.sh ${ROS_WS} --packages-select spark_3dsg_pipeline
 
 # Keep validation separate so a failed assertion does not discard the costly
 # workspace build layer.
@@ -115,44 +127,37 @@ RUN set +u \
          | grep -F 'not found' \
     && ! find ${ROS_WS}/install -xtype l -print -quit | grep -q .
 
-WORKDIR ${PIPELINE_ROOT}
-COPY . ${PIPELINE_ROOT}
-
-# A single isolated environment holds both data tools and inference packages.
-# BuildKit retains downloaded wheels between rebuilds without adding them to the
-# final image layer.
+# Python dependencies form a separate branch: neither C++ compilation nor
+# local launch/config edits should reinstall the multi-gigabyte Torch wheels.
+FROM build-base AS python-deps
+ARG TORCH_VERSION=2.7.0
+ARG TORCHVISION_VERSION=0.22.0
+ARG PYTORCH_INDEX=https://download.pytorch.org/whl/cu128
 RUN --mount=type=cache,target=/root/.cache/pip \
     python3 -m venv "${SEMANTIC_ENV}" \
     && "${SEMANTIC_ENV}/bin/pip" install --upgrade pip \
     && "${SEMANTIC_ENV}/bin/pip" install \
          torch==${TORCH_VERSION} torchvision==${TORCHVISION_VERSION} \
-         --index-url ${PYTORCH_INDEX} \
-    && "${SEMANTIC_ENV}/bin/pip" install --no-deps \
-         ${ROS_WS}/src/spark_config \
+         --index-url ${PYTORCH_INDEX}
+
+COPY dependencies/gpu.requirements.txt /tmp/gpu.requirements.txt
+COPY --from=sources /home/spark/ros_ws/src/spark_config ${ROS_WS}/src/spark_config
+COPY --from=sources /home/spark/ros_ws/src/ultralytics_clip ${ROS_WS}/src/ultralytics_clip
+COPY --from=sources /home/spark/ros_ws/src/semantic_inference ${ROS_WS}/src/semantic_inference
+RUN --mount=type=cache,target=/root/.cache/pip \
+    "${SEMANTIC_ENV}/bin/pip" install --no-deps ${ROS_WS}/src/spark_config \
     && "${SEMANTIC_ENV}/bin/pip" install \
-         --requirement dependencies/gpu.requirements.txt \
-    && "${SEMANTIC_ENV}/bin/pip" install \
-         ${ROS_WS}/src/ultralytics_clip \
+         --requirement /tmp/gpu.requirements.txt \
+    && "${SEMANTIC_ENV}/bin/pip" install ${ROS_WS}/src/ultralytics_clip \
     && "${SEMANTIC_ENV}/bin/pip" install --no-deps \
          ${ROS_WS}/src/semantic_inference/semantic_inference \
-    && "${SEMANTIC_ENV}/bin/pip" check \
-    && set +u \
-    && source /opt/ros/${ROS_DISTRO}/setup.bash \
-    && source ${ROS_WS}/install/setup.bash \
-    && set -u \
-    && ros2 pkg prefix hydra_ros \
-    && ros2 pkg prefix khronos_ros \
-    && ros2 pkg prefix semantic_inference_ros \
-    && ros2 pkg prefix spark_3dsg_pipeline \
-    && python -c \
-         "import clip, PIL, rclpy, semantic_inference, spark_dsg, torch, torchvision, ultralytics; assert torch.__version__.split('+')[0] == '${TORCH_VERSION}'; assert torchvision.__version__.split('+')[0] == '${TORCHVISION_VERSION}'; assert torch.version.cuda == '12.8'"
+    && "${SEMANTIC_ENV}/bin/pip" check
 
 
 FROM ${CUDA_RUNTIME_IMAGE} AS runtime
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG USER_UID=1000
-ARG USER_GID=1000
+ARG TARGETARCH
 ARG TENSORRT_VERSION=10.9.0.34-1+cuda12.8
 ARG TORCH_VERSION=2.7.0
 ARG TORCHVISION_VERSION=0.22.0
@@ -168,7 +173,10 @@ ENV ROS_DISTRO=jazzy \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,id=apt-gpu-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-gpu-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
       gnupg2 \
@@ -180,17 +188,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
          -o /usr/share/keyrings/ros-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu noble main" \
-         > /etc/apt/sources.list.d/ros2.list \
-    && rm -rf /var/lib/apt/lists/*
+         > /etc/apt/sources.list.d/ros2.list
 
 ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
 # Preserve the existing ROS desktop capability, but install only TensorRT's
 # shared runtime libraries. rosdep is used with exec dependencies only and sees
-# the builder source tree through an ephemeral BuildKit mount.
-RUN --mount=from=builder,source=/home/spark/ros_ws/src,target=/tmp/ros_src,ro \
-    apt-get update && apt-get install -y --no-install-recommends \
+# the source stage through an ephemeral BuildKit mount. This does not wait
+# for workspace compilation or Python dependency installation.
+RUN --mount=type=cache,id=apt-gpu-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-gpu-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    --mount=from=sources,source=/home/spark/ros_ws/src,target=/tmp/ros_src,ro \
+    --mount=type=bind,source=src/spark_3dsg_pipeline/package.xml,target=/tmp/local_package/package.xml \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update && apt-get install -y --no-install-recommends \
       python3-rosdep \
       ros-jazzy-desktop \
       ros-jazzy-rmw-fastrtps-cpp \
@@ -200,11 +212,13 @@ RUN --mount=from=builder,source=/home/spark/ros_ws/src,target=/tmp/ros_src,ro \
       "libnvonnxparsers10=${TENSORRT_VERSION}" \
     && { rosdep init 2>/dev/null || true; } \
     && rosdep update --rosdistro ${ROS_DISTRO} \
-    && rosdep install --from-paths /tmp/ros_src --ignore-src -r -y \
+    && rosdep install --from-paths /tmp/ros_src /tmp/local_package --ignore-src -r -y \
          --rosdistro ${ROS_DISTRO} --dependency-types exec \
     && test "$(dpkg-query -W -f='${Version}' libnvinfer10)" = \
-         "${TENSORRT_VERSION}" \
-    && rm -rf /var/lib/apt/lists/*
+         "${TENSORRT_VERSION}"
+
+ARG USER_UID=1000
+ARG USER_GID=1000
 
 # Create the final UID/GID before copying large artifacts. COPY --chown records
 # each file only once, avoiding the multi-gigabyte copy-on-write layer produced
@@ -229,7 +243,7 @@ RUN set -eux; \
 
 COPY --from=builder --chown=${USER_UID}:${USER_GID} \
     /home/spark/ros_ws/install /home/spark/ros_ws/install
-COPY --from=builder --chown=${USER_UID}:${USER_GID} \
+COPY --from=python-deps --chown=${USER_UID}:${USER_GID} \
     /home/spark/.venvs /home/spark/.venvs
 COPY --chown=${USER_UID}:${USER_GID} src/spark_3dsg_pipeline \
     ${ROS_WS}/src/spark_3dsg_pipeline
@@ -250,6 +264,8 @@ RUN set +u \
     && ! ldd ${ROS_WS}/install/lib/libsemantic_inference.so \
          | grep -F 'not found' \
     && ! find ${ROS_WS}/install -xtype l -print -quit | grep -q . \
+    && python3 ${PIPELINE_ROOT}/scripts/python/check_runtime_linkage.py \
+         ${ROS_WS}/install --allow-driver-libraries \
     && ! command -v nvcc \
     && ! dpkg-query -W libnvinfer-dev >/dev/null 2>&1 \
     && ros2 pkg prefix hydra_ros \

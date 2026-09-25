@@ -2,6 +2,10 @@
 set -euo pipefail
 
 workspace="${1:-${ROS_WS:-/home/spark/ros_ws}}"
+# Optional remaining arguments select the local package after upstream is built.
+if (( $# )); then
+  shift
+fi
 
 # ROS-generated environment hooks probe optional variables such as
 # AMENT_TRACE_SETUP_FILES and are not safe to source while nounset is enabled.
@@ -11,6 +15,7 @@ set -u
 cd "$workspace"
 
 colcon_args=(
+  "$@" \
   --merge-install \
   --event-handlers console_cohesion+ \
   --cmake-args \

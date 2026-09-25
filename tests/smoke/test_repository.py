@@ -1,5 +1,6 @@
 from pathlib import Path
 import hashlib
+import os
 import re
 
 import yaml
@@ -151,7 +152,7 @@ def test_preprocessing_dataset_manifest_is_small_exact_and_https():
     assert "test-preprocess:" in makefile
     preprocessing_target = makefile.split(
         "prepare-preprocess-fixtures: ##", 1
-    )[1].split("test-preprocess: ##", 1)[0]
+    )[1].split("\n\n", 1)[0]
     assert "preprocess" in preprocessing_target
     assert "--build" not in preprocessing_target
 
@@ -393,7 +394,7 @@ def test_mesh_bearing_example_graphs_are_tracked_outside_docker_context():
         "uhumans2_office_ade20k_full_dsg_with_mesh.json":
             "25aa1328301bbd2abddb86275e152b5404fa0ee53912839018febbffbd45fb7e",
     }
-    example_dir = ROOT / "examples/dsg"
+    example_dir = Path(os.environ.get("PIPELINE_EXAMPLES_DIR", ROOT / "examples")) / "dsg"
     for name, checksum in expected.items():
         path = example_dir / name
         assert path.is_file()
@@ -463,10 +464,11 @@ def test_core_is_complete_and_gpu_has_an_independent_runtime_stage():
     )
 
     assert "ARG ROS_IMAGE=osrf/ros:jazzy-desktop-full" in core
-    assert sum(line.startswith("FROM ") for line in core.splitlines()) == 1
-    assert sum(line.startswith("FROM ") for line in gpu.splitlines()) == 2
-    assert "--from=" not in core
-    assert "FROM ${CUDA_IMAGE} AS builder" in gpu
+    # Core still ships its complete workspace so symlinks and colcon tests work.
+    assert "/home/spark/ros_ws /home/spark/ros_ws" in core
+    assert "COPY --from=builder --chown=${USER_UID}:${USER_GID}" in core
+    assert 'chown -R "${USER_UID}:${USER_GID}"' not in core
+    assert "FROM ${CUDA_IMAGE} AS build-base" in gpu
     assert "FROM ${CUDA_RUNTIME_IMAGE} AS runtime" in gpu
     assert "COPY --from=builder --chown=${USER_UID}:${USER_GID}" in gpu
     assert "spark-3dsg-core" not in gpu
@@ -477,7 +479,7 @@ def test_core_is_complete_and_gpu_has_an_independent_runtime_stage():
     assert "ros-jazzy-desktop" in gpu
     assert "python3-vcstool" in core
     assert "python3-vcstool" in gpu
-    assert "COPY . ${PIPELINE_ROOT}" in core
+    assert "COPY --chown=${USER_UID}:${USER_GID} . ${PIPELINE_ROOT}" in core
     assert "COPY --chown=${USER_UID}:${USER_GID} . ${PIPELINE_ROOT}" in gpu
     assert "SPARK_SYMLINK_INSTALL=ON" in core
     assert "SPARK_SYMLINK_INSTALL=OFF" in gpu
@@ -487,6 +489,49 @@ def test_core_is_complete_and_gpu_has_an_independent_runtime_stage():
         '"-DSEMANTIC_INFERENCE_USE_TRT='
         '${SPARK_SEMANTIC_INFERENCE_USE_TRT:-OFF}"'
     ) in build_script
+
+
+def test_preprocessing_runtime_preserves_sdk_and_omits_workspace_build_tree():
+    dockerfile = (ROOT / "docker/Dockerfile.preprocess").read_text(encoding="utf-8")
+    assert re.search(
+        r"ARG ZED_RUNTIME_IMAGE=stereolabs/zed:5\.4\.1-runtime-cuda12\.8-ubuntu24\.04"
+        r"@sha256:[0-9a-f]{64}\n", dockerfile,
+    )
+    runtime_base = dockerfile.split("FROM ${ZED_RUNTIME_IMAGE} AS runtime-base", 1)[1]
+    assert "--dependency-types exec" in runtime_base
+    assert "ros-jazzy-camera-calibration" in runtime_base
+    assert "ros-jazzy-depth-image-proc" in runtime_base
+    runtime = dockerfile.split("FROM runtime-base AS runtime", 1)[1]
+    assert "/home/spark/ros_ws/install /home/spark/ros_ws/install" in runtime
+    assert "/home/spark/ros_ws /home/spark/ros_ws" not in runtime
+    assert "/home/spark/ros_ws/build" not in runtime
+    assert "check_runtime_linkage.py" in runtime
+    assert "! command -v nvcc" in runtime
+    assert "USER spark" in runtime
+    assert 'test -w /usr/local/zed/settings && test -w /usr/local/zed/resources' in runtime
+
+
+def test_local_package_edits_do_not_invalidate_upstream_or_python_builds():
+    for name, package in (
+        ("core", "spark_3dsg_pipeline"),
+        ("gpu", "spark_3dsg_pipeline"),
+        ("preprocess", "spark_3dsg_preprocessing"),
+    ):
+        dockerfile = (ROOT / f"docker/Dockerfile.{name}").read_text(encoding="utf-8")
+        builder = dockerfile.split(" AS builder\n", 1)[1].split("\nFROM ", 1)[0]
+        upstream, local = builder.split(f"COPY src/{package} src/{package}", 1)
+        assert "build_workspace.sh ${ROS_WS}" in upstream or "colcon build" in upstream
+        assert f"--packages-select {package}" in local
+        assert "rosdep install" not in local
+        assert "ARG USER_UID" not in builder
+        assert "target=/root/.cache/pip" in dockerfile
+        assert "--no-cache-dir" not in dockerfile
+        assert "target=/var/cache/apt,sharing=locked" in dockerfile
+        assert "--mount=from=sources" in dockerfile
+        python_stage = "python-deps" if name == "gpu" else "data-tools"
+        python_build = dockerfile.split(f" AS {python_stage}\n", 1)[1].split("\nFROM ", 1)[0]
+        assert "COPY . " not in python_build
+        assert "pip\" install" in python_build
 
 
 def test_gpu_stack_is_exact_and_python_is_self_contained():

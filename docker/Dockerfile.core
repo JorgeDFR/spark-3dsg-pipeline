@@ -1,14 +1,12 @@
 # syntax=docker/dockerfile:1.7
 
-# Keep the core image deliberately boring: one ROS development image contains
-# the compiler, exact-SHA upstream source, installed workspace, tests, and RViz.
-# This is larger than a split runtime image, but much easier to build and debug.
+# Keep the full development/test capability. Assemble the workspace once with
+# its final ownership instead of duplicating it with a later recursive chown.
 ARG ROS_IMAGE=osrf/ros:jazzy-desktop-full
-FROM ${ROS_IMAGE}
+FROM ${ROS_IMAGE} AS base
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG USER_UID=1000
-ARG USER_GID=1000
+ARG TARGETARCH
 ENV ROS_DISTRO=jazzy \
     ROS_WS=/home/spark/ros_ws \
     PIPELINE_ROOT=/home/spark/spark-3dsg-pipeline \
@@ -18,7 +16,10 @@ ENV ROS_DISTRO=jazzy \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,id=apt-core-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-core-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update && apt-get install -y --no-install-recommends \
       build-essential \
       ca-certificates \
       curl \
@@ -36,47 +37,53 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       python3-yaml \
       ros-dev-tools \
       ros-jazzy-rmw-fastrtps-cpp \
-      ros-jazzy-rosbag2-storage-mcap \
-    && rm -rf /var/lib/apt/lists/*
+      ros-jazzy-rosbag2-storage-mcap
 
 RUN rosdep init 2>/dev/null || true \
     && rosdep update --rosdistro ${ROS_DISTRO}
 
+FROM base AS sources
 WORKDIR ${ROS_WS}
 COPY dependencies/locks/v1.lock.repos /tmp/v1.lock.repos
 COPY scripts/shell/bootstrap_dependencies.sh /tmp/bootstrap_dependencies.sh
 RUN /tmp/bootstrap_dependencies.sh ${ROS_WS}/src /tmp/v1.lock.repos
 
-# Keeping the local package in a separate layer lets edits rebuild only the
-# workspace, while an unchanged dependency lock keeps the expensive fetch.
-COPY src/spark_3dsg_pipeline src/spark_3dsg_pipeline
-RUN apt-get update \
-    && rosdep install --from-paths src --ignore-src -r -y \
-         --rosdistro ${ROS_DISTRO} \
-    && rm -rf /var/lib/apt/lists/*
+# Resolve dependencies from immutable upstream source and the local manifest.
+# Launch/config edits must not invalidate package installation or compilation.
+FROM base AS dependencies
+RUN --mount=type=cache,id=apt-core-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-core-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    --mount=from=sources,source=/home/spark/ros_ws/src,target=/tmp/ros_src,ro \
+    --mount=type=bind,source=src/spark_3dsg_pipeline/package.xml,target=/tmp/local_package/package.xml \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update \
+    && rosdep install --from-paths /tmp/ros_src /tmp/local_package \
+         --ignore-src -r -y --rosdistro ${ROS_DISTRO}
 
+FROM dependencies AS builder
+WORKDIR ${ROS_WS}
+COPY --from=sources /home/spark/ros_ws/src /home/spark/ros_ws/src
 COPY scripts/shell/build_workspace.sh /tmp/build_workspace.sh
 RUN SPARK_BUILD_TESTING=OFF SPARK_SYMLINK_INSTALL=ON \
     /tmp/build_workspace.sh ${ROS_WS}
 
-WORKDIR ${PIPELINE_ROOT}
-COPY . ${PIPELINE_ROOT}
+COPY src/spark_3dsg_pipeline src/spark_3dsg_pipeline
+RUN SPARK_BUILD_TESTING=OFF SPARK_SYMLINK_INSTALL=ON \
+    /tmp/build_workspace.sh ${ROS_WS} --packages-select spark_3dsg_pipeline
 
-RUN chmod +x docker/*.sh scripts/shell/*.sh scripts/python/*.py \
-    && python3 -m venv --system-site-packages "${DATA_TOOLS_ENV}" \
-    && "${DATA_TOOLS_ENV}/bin/pip" install --no-cache-dir --upgrade pip \
-    && "${DATA_TOOLS_ENV}/bin/pip" install --no-cache-dir \
-         --requirement dependencies/data-tools.requirements.txt \
-    && rosbags-convert --help >/dev/null \
-    && set +u \
-    && source /opt/ros/${ROS_DISTRO}/setup.bash \
-    && source ${ROS_WS}/install/setup.bash \
-    && set -u \
-    && ros2 pkg prefix hydra_ros \
-    && ros2 pkg prefix khronos_ros \
-    && ros2 pkg prefix spark_3dsg_pipeline \
-    && python3 -c 'import spark_dsg'
+# Use the final system packages when creating a system-site-packages venv.
+FROM dependencies AS data-tools
+COPY dependencies/data-tools.requirements.txt /tmp/data-tools.requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m venv --system-site-packages "${DATA_TOOLS_ENV}" \
+    && "${DATA_TOOLS_ENV}/bin/pip" install --upgrade pip \
+    && "${DATA_TOOLS_ENV}/bin/pip" install \
+         --requirement /tmp/data-tools.requirements.txt \
+    && rosbags-convert --help >/dev/null
 
+FROM dependencies AS runtime
+ARG USER_UID=1000
+ARG USER_GID=1000
 # Match bind-mounted data/model/output ownership to the invoking host user.
 RUN set -eux; \
     if getent group spark >/dev/null; then \
@@ -93,9 +100,27 @@ RUN set -eux; \
     fi; \
     install -d -o "${USER_UID}" -g "${USER_GID}" \
       /home/spark /home/spark/.cache /home/spark/.ros \
-      /home/spark/data /home/spark/models /home/spark/output; \
-    chown -R "${USER_UID}:${USER_GID}" \
-      "${ROS_WS}" "${PIPELINE_ROOT}" /home/spark/.venvs
+      /home/spark/data /home/spark/models /home/spark/output
+
+# Preserve src/build/install at their original absolute paths: core deliberately
+# uses symlink install and supports colcon tests and interactive development.
+COPY --from=builder --chown=${USER_UID}:${USER_GID} \
+    /home/spark/ros_ws /home/spark/ros_ws
+COPY --from=data-tools --chown=${USER_UID}:${USER_GID} \
+    /home/spark/.venvs /home/spark/.venvs
+COPY --chown=${USER_UID}:${USER_GID} . ${PIPELINE_ROOT}
+WORKDIR ${PIPELINE_ROOT}
+RUN chmod +x docker/*.sh scripts/shell/*.sh scripts/python/*.py \
+    && set +u \
+    && source /opt/ros/${ROS_DISTRO}/setup.bash \
+    && source ${ROS_WS}/install/setup.bash \
+    && set -u \
+    && ros2 pkg prefix hydra_ros \
+    && ros2 pkg prefix khronos_ros \
+    && ros2 pkg prefix spark_3dsg_pipeline \
+    && python3 -c 'import spark_dsg' \
+    && rosbags-convert --help >/dev/null \
+    && ! find ${ROS_WS}/install -xtype l -print -quit | grep -q .
 
 ENV HOME=/home/spark \
     XDG_CACHE_HOME=/home/spark/.cache

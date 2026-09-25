@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1.7
 
 ARG ZED_DEVEL_IMAGE=stereolabs/zed:5.4.1-devel-cuda12.8-ubuntu24.04@sha256:c12a20237f55958e878853d1e112927de71f7756433e5dec7078e5f6885fbb60
+ARG ZED_RUNTIME_IMAGE=stereolabs/zed:5.4.1-runtime-cuda12.8-ubuntu24.04@sha256:9f19225a988d7ad6b8a76a359b15b37538c1147f7b66652df47361df210ea675
 
-FROM ${ZED_DEVEL_IMAGE}
+FROM ${ZED_DEVEL_IMAGE} AS build-base
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG USER_UID=1000
-ARG USER_GID=1000
+ARG TARGETARCH
 ENV ROS_DISTRO=jazzy \
     ROS_WS=/home/spark/ros_ws \
     PIPELINE_ROOT=/home/spark/spark-3dsg-pipeline \
@@ -17,7 +17,10 @@ ENV ROS_DISTRO=jazzy \
     PYTHONUNBUFFERED=1
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,id=apt-preprocess-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-preprocess-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl gnupg2 locales software-properties-common \
     && locale-gen en_US en_US.UTF-8 \
     && curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
@@ -29,8 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       python3-vcstool python3-yaml \
       ros-dev-tools ros-jazzy-camera-calibration ros-jazzy-desktop \
       ros-jazzy-depth-image-proc \
-      ros-jazzy-rmw-fastrtps-cpp ros-jazzy-rosbag2-storage-mcap \
-    && rm -rf /var/lib/apt/lists/*
+      ros-jazzy-rmw-fastrtps-cpp ros-jazzy-rosbag2-storage-mcap
 
 RUN rosdep init 2>/dev/null || true \
     && rosdep update --rosdistro ${ROS_DISTRO}
@@ -42,26 +44,38 @@ RUN test -r /usr/local/zed/lib/libsl_zed.so \
     && echo /usr/local/zed/lib > /etc/ld.so.conf.d/zed.conf \
     && ldconfig
 
+FROM build-base AS sources
 WORKDIR ${ROS_WS}
 COPY dependencies/locks/preprocess.lock.repos /tmp/preprocess.lock.repos
 COPY scripts/shell/bootstrap_dependencies.sh /tmp/bootstrap_dependencies.sh
 RUN /tmp/bootstrap_dependencies.sh ${ROS_WS}/src /tmp/preprocess.lock.repos
 
-COPY src/spark_3dsg_preprocessing src/spark_3dsg_preprocessing
-RUN apt-get update \
-    && rosdep install --from-paths src --ignore-src -r -y \
-         --rosdistro ${ROS_DISTRO} \
-    && rm -rf /var/lib/apt/lists/*
+FROM sources AS builder
+RUN --mount=type=cache,id=apt-preprocess-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-preprocess-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    --mount=type=bind,source=src/spark_3dsg_preprocessing/package.xml,target=/tmp/local_package/package.xml \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update \
+    && rosdep install --from-paths src /tmp/local_package --ignore-src -r -y \
+         --rosdistro ${ROS_DISTRO}
 
 RUN set +u \
     && source /opt/ros/${ROS_DISTRO}/setup.bash \
     && set -u \
     && colcon build --merge-install --event-handlers console_cohesion+ \
-         --packages-up-to spark_3dsg_preprocessing rtabmap_odom ov_msckf \
+         --packages-up-to rtabmap_odom rtabmap_sync ov_msckf \
            zed_components zed_wrapper \
          --cmake-args -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release \
            -DBUILD_APP=OFF -DBUILD_EXAMPLES=OFF -DBUILD_TOOLS=OFF \
            -DWITH_ZED=OFF -DWITH_ZEDOC=OFF
+
+# Only this inexpensive installation is invalidated by local Python/config edits.
+COPY src/spark_3dsg_preprocessing src/spark_3dsg_preprocessing
+RUN set +u \
+    && source /opt/ros/${ROS_DISTRO}/setup.bash \
+    && set -u \
+    && colcon build --merge-install --event-handlers console_cohesion+ \
+         --packages-select spark_3dsg_preprocessing
 
 RUN set +u \
     && source /opt/ros/${ROS_DISTRO}/setup.bash \
@@ -80,6 +94,63 @@ RUN set +u \
     && ! ldd ${ROS_WS}/install/lib/libzed_camera_component.so \
          | grep -F "libsl_zed.so => not found"
 
+# Install the runtime dependency set independently of workspace compilation.
+FROM ${ZED_RUNTIME_IMAGE} AS runtime-base
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TARGETARCH
+ENV ROS_DISTRO=jazzy \
+    ROS_WS=/home/spark/ros_ws \
+    PIPELINE_ROOT=/home/spark/spark-3dsg-pipeline \
+    DATA_TOOLS_ENV=/home/spark/.venvs/data-tools \
+    PATH=/home/spark/.venvs/data-tools/bin:${PATH} \
+    LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8 \
+    PYTHONUNBUFFERED=1
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN --mount=type=cache,id=apt-preprocess-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-preprocess-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl gnupg2 locales software-properties-common \
+    && locale-gen en_US en_US.UTF-8 \
+    && curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+         -o /usr/share/keyrings/ros-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu noble main" \
+         > /etc/apt/sources.list.d/ros2.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+      python3-rosdep python3-venv python3-yaml \
+      ros-jazzy-camera-calibration ros-jazzy-desktop \
+      ros-jazzy-depth-image-proc \
+      ros-jazzy-rmw-fastrtps-cpp ros-jazzy-rosbag2-storage-mcap
+
+RUN --mount=type=cache,id=apt-preprocess-${TARGETARCH},target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=apt-lists-preprocess-${TARGETARCH},target=/var/lib/apt/lists,sharing=locked \
+    --mount=from=sources,source=/home/spark/ros_ws/src,target=/tmp/ros_src,ro \
+    --mount=type=bind,source=src/spark_3dsg_preprocessing/package.xml,target=/tmp/local_package/package.xml \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && apt-get update \
+    && { rosdep init 2>/dev/null || true; } \
+    && rosdep update --rosdistro ${ROS_DISTRO} \
+    && rosdep install --from-paths /tmp/ros_src /tmp/local_package \
+         --ignore-src -r -y --rosdistro ${ROS_DISTRO} --dependency-types exec \
+    && test -r /usr/local/zed/lib/libsl_zed.so \
+    && echo /usr/local/zed/lib > /etc/ld.so.conf.d/zed.conf \
+    && ldconfig
+
+# Build against exactly the system packages that will be present at runtime.
+FROM runtime-base AS data-tools
+COPY dependencies/data-tools.requirements.txt /tmp/data-tools.requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m venv --system-site-packages "${DATA_TOOLS_ENV}" \
+    && "${DATA_TOOLS_ENV}/bin/pip" install --upgrade pip \
+    && "${DATA_TOOLS_ENV}/bin/pip" install \
+         --requirement /tmp/data-tools.requirements.txt \
+    && rosbags-convert --help >/dev/null
+
+FROM runtime-base AS runtime
+ARG USER_UID=1000
+ARG USER_GID=1000
 RUN set -eux; \
     if getent group spark >/dev/null; then \
       groupmod --non-unique --gid "${USER_GID}" spark; \
@@ -98,17 +169,15 @@ RUN set -eux; \
       /home/spark/.cache /home/spark/.ros /home/spark/data \
       /home/spark/output /home/spark/.venvs
 
+COPY --from=builder --chown=${USER_UID}:${USER_GID} \
+    /home/spark/ros_ws/install /home/spark/ros_ws/install
+COPY --from=data-tools --chown=${USER_UID}:${USER_GID} \
+    /home/spark/.venvs /home/spark/.venvs
 COPY --chown=${USER_UID}:${USER_GID} . ${PIPELINE_ROOT}
 WORKDIR ${PIPELINE_ROOT}
+RUN chmod +x docker/*.sh scripts/shell/*.sh scripts/python/*.py
 
-RUN chmod +x docker/*.sh scripts/shell/*.sh scripts/python/*.py \
-    && python3 -m venv --system-site-packages "${DATA_TOOLS_ENV}" \
-    && "${DATA_TOOLS_ENV}/bin/pip" install --no-cache-dir --upgrade pip \
-    && "${DATA_TOOLS_ENV}/bin/pip" install --no-cache-dir \
-         --requirement dependencies/data-tools.requirements.txt \
-    && rosbags-convert --help >/dev/null \
-    && chown -R "${USER_UID}:${USER_GID}" "${DATA_TOOLS_ENV}" \
-    && set +u \
+RUN set +u \
     && source /opt/ros/${ROS_DISTRO}/setup.bash \
     && source ${ROS_WS}/install/setup.bash \
     && set -u \
@@ -119,13 +188,23 @@ RUN chmod +x docker/*.sh scripts/shell/*.sh scripts/python/*.py \
     && ros2 pkg prefix ov_msckf \
     && ros2 pkg prefix zed_components \
     && ros2 pkg prefix zed_wrapper \
-    && ros2 launch spark_3dsg_preprocessing preprocess.launch.py --show-args >/dev/null
+    && ros2 launch spark_3dsg_preprocessing preprocess.launch.py --show-args >/dev/null \
+    && ! find ${ROS_WS}/install -xtype l -print -quit | grep -q . \
+    && test -r /usr/local/zed/lib/libsl_zed.so \
+    && python3 ${PIPELINE_ROOT}/scripts/python/check_runtime_linkage.py \
+         ${ROS_WS}/install --allow-driver-libraries \
+    && ! command -v nvcc \
+    && rosbags-convert --help >/dev/null
 
 # The vendor SDK may be installed with root-only directory permissions. Runtime
 # Libraries remain root-owned and readable by runtime users. Only SDK download
 # caches need spark ownership/write access. Keep this after the build so
-# expensive compilation stays cached.
-RUN chmod -R a+rX /usr/local/zed \
+# expensive compilation stays cached. Only chmod entries that need a change,
+# avoiding copy-up of already-readable SDK files from the runtime base layer.
+RUN find /usr/local/zed -type d ! -perm -0555 -exec chmod a+rX {} + \
+    && find /usr/local/zed -type f \
+         \( ! -perm -0444 -o \( -perm /0111 ! -perm -0111 \) \) \
+         -exec chmod a+rX {} + \
     && mkdir -p /usr/local/zed/settings /usr/local/zed/resources \
     && chown -R "${USER_UID}:${USER_GID}" \
          /usr/local/zed/settings /usr/local/zed/resources \

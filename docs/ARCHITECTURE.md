@@ -64,7 +64,7 @@ and exported files.
 | --- | --- | --- |
 | `spark-3dsg-core:local` | `osrf/ros:jazzy-desktop-full` | CPU recorded mapping, RViz, repository tests, development |
 | `spark-3dsg-gpu:local` | NVIDIA CUDA 12.8.1 on Ubuntu 24.04 | TensorRT and PyTorch semantic inference with mapping |
-| `spark-3dsg-preprocess:local` | `stereolabs/zed:5.4.1-devel-cuda12.8-ubuntu24.04` | Passthrough, recorded odometry, RTAB-Map, OpenVINS, ZED tracking |
+| `spark-3dsg-preprocess:local` | `stereolabs/zed:5.4.1-runtime-cuda12.8-ubuntu24.04` | Passthrough, recorded odometry, RTAB-Map, OpenVINS, ZED tracking |
 
 All three images build independently. The preprocessing image is optional and
 selects one pose provider at runtime. Its output follows the same mapping input
@@ -72,16 +72,41 @@ contract for every source.
 
 ### GPU build and runtime
 
-The GPU image uses two stages and does not inherit from the local core image.
+The GPU image builds its ROS workspace and Python environment in separate
+branches, then assembles a runtime image. It does not inherit from the local
+core image.
 
 | Stage | Contents |
 | --- | --- |
 | Builder | CUDA compiler, TensorRT headers, exact-SHA upstream source, colcon build tree |
+| Python dependencies | Independently cached Torch wheels and inference packages |
 | Runtime | Installed ROS workspace, semantic-inference virtual environment, TensorRT libraries, ROS execution dependencies |
 
-Both stages use Ubuntu 24.04 for ROS 2 Jazzy compatibility. Official PyTorch
+All stages use Ubuntu 24.04 for ROS 2 Jazzy compatibility. Official PyTorch
 `cu128` wheels are installed in one virtual environment. The qualified versions
 are recorded in [the GPU baseline](../dependencies/GPU_BASELINE.md).
+
+### Build caching and preprocessing runtime
+
+All three builds install locked upstream packages before installing local
+integration packages. A local Python, launch, or config edit only rebuilds the
+local package and final image assembly. Package-manifest and lock changes still
+invalidate dependency resolution. APT and pip download caches live in BuildKit,
+outside the final images.
+APT caches are locked and scoped by image and architecture.
+
+Core retains its complete workspace and development dependencies. Its final
+stage copies the workspace with the host UID/GID in one layer, avoiding a second
+copy created by recursive ownership changes. The UID/GID is applied after
+expensive build steps in all images.
+
+Preprocessing compiles against the pinned ZED development image and copies its
+non-symlink install into the matching pinned ZED runtime image. Its final image
+retains ROS desktop, calibration, conversion, and all pose backends, but excludes
+the upstream workspace source/build trees and CUDA compiler. Upstream runtime
+manifests can still require some development packages. The SDK settings/resources volumes retain their writable non-root
+ownership. See [Docker build validation](DOCKER_BUILDS.md) for checks and the
+size/build-cache tradeoff.
 
 ### Runtime files and identity
 
@@ -95,8 +120,8 @@ core image.
 | Custom YAML configs | `data/custom-configs` mount | Edit the file and pass its container path |
 | Bags, models, outputs | Data, model, and output mounts | Manage independently of image builds |
 
-The core workspace uses symlink installation within the image. The GPU
-workspace uses a self-contained install tree.
+The core workspace uses symlink installation within the image. GPU and
+preprocessing workspaces use self-contained install trees.
 
 ## Dependency locks
 

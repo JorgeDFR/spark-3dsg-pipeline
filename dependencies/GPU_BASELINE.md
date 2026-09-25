@@ -62,6 +62,12 @@ wheels into a Python 3.12 virtual environment, then copies the resulting
 artifacts into NVIDIA's matching CUDA runtime image. CUDA/TensorRT development
 packages and the colcon build tree do not enter the final image.
 
+The Python environment and ROS workspace now build in independent stages.
+Torch installation is cached separately from the remaining Python packages.
+Runtime dependency resolution reads the locked source stage without waiting
+for compilation. Local launch/config changes do not reinstall Torch or rebuild
+upstream C++. The compatibility versions above are unchanged.
+
 ## Upstream references
 
 - [PyTorch 2.7 release](https://pytorch.org/blog/pytorch-2-7/)

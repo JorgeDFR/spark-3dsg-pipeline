@@ -15,11 +15,17 @@ make inspect DSG=/home/spark/output/run/dsg.json \
 
 Use `make shell PROFILE=core BUILD=1` for the complete compiler environment,
 pytest, or upstream source access. The core image retains its source and build
-tree. The GPU runtime image deliberately omits compilers, upstream source, and
-build objects. Use the Docker builder-stage output or rebuild with progress
-enabled when diagnosing a GPU compilation failure. Use `docker image ls` and
+tree. GPU and preprocessing runtime images omit the CUDA compiler and upstream
+workspace source/build trees. Use the Docker builder-stage output or rebuild
+with progress enabled when diagnosing a compilation failure. Use `docker image ls` and
 `docker image history` to confirm the runtime image contains only the expected
 final-stage layers.
+
+The runtime builds check installed ELF dependencies. During image construction,
+NVIDIA driver libraries are allowed to be absent because the container runtime
+injects them at GPU startup. SDK and CUDA toolkit libraries must resolve. These
+checks do not replace GPU execution or plugin-loading tests. Follow
+[Docker build validation](DOCKER_BUILDS.md) after image changes.
 
 For file visualization, a missing path fails before launch and malformed JSON
 returns nonzero with a parse explanation. When given `dsg.json`, the wrapper
