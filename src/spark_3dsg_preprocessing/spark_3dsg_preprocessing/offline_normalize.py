@@ -5,16 +5,44 @@ from __future__ import annotations
 
 from collections import deque
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
 from rosbags.highlevel import AnyReader
 from rosbags.rosbag2 import Writer
 from rosbags.typesys import Stores, get_typestore
+import yaml
+
+from .trajectory import load_trajectory, quaternion_from_rotation, quaternion_product
 
 
 DEFAULT_TYPESTORE = get_typestore(Stores.ROS2_JAZZY)
 TF_TYPE = "tf2_msgs/msg/TFMessage"
+
+
+def _external_odometry(timestamp: int, position: np.ndarray, orientation: np.ndarray,
+                       frames: dict[str, str], typestore: Any) -> Any:
+    types = typestore.types
+    return types["nav_msgs/msg/Odometry"](
+        types["std_msgs/msg/Header"](
+            types["builtin_interfaces/msg/Time"](*divmod(timestamp, 1_000_000_000)),
+            frames["odom"],
+        ),
+        frames["robot"],
+        types["geometry_msgs/msg/PoseWithCovariance"](
+            types["geometry_msgs/msg/Pose"](
+                types["geometry_msgs/msg/Point"](*position),
+                types["geometry_msgs/msg/Quaternion"](*orientation),
+            ), np.zeros(36),
+        ),
+        types["geometry_msgs/msg/TwistWithCovariance"](
+            types["geometry_msgs/msg/Twist"](
+                types["geometry_msgs/msg/Vector3"](0., 0., 0.),
+                types["geometry_msgs/msg/Vector3"](0., 0., 0.),
+            ), np.zeros(36),
+        ),
+    )
 
 
 def _transform_from_odometry(message: Any, robot: str, typestore: Any) -> Any:
@@ -183,11 +211,17 @@ def materialize_rosbag(
 ) -> None:
     """Rewrite a bag directly; supported pose data never crosses DDS."""
     backend = profile["pose"]["backend"]
-    if backend not in {"existing_tf", "recorded_odometry"}:
+    if backend not in {"existing_tf", "recorded_odometry", "external_trajectory"}:
         raise ValueError(f"pose backend requires an estimator process: {backend}")
 
     topics = source["topics"]
     frames = source["frames"]
+    trajectory = (
+        load_trajectory(profile["pose"]["trajectory"])
+        if backend == "external_trajectory" else None
+    )
+    dropped: dict[str, int] = {}
+    emitted: set[int] = set()
     routes = {
         topics["color"]: ("/input/color/image_raw", "sensor"),
         topics["color_camera_info"]: ("/input/color/camera_info", "sensor"),
@@ -206,24 +240,39 @@ def materialize_rosbag(
         output_path, version=9
     ) as writer:
         typestore = reader.typestore
+        if trajectory:
+            # Source schemas need not include Odometry or its nested pose types.
+            typestore.register({
+                name: definition for name, definition in DEFAULT_TYPESTORE.fielddefs.items()
+                if name not in typestore.fielddefs
+            })
+        static_messages = []
+        if trajectory or source["depth"]["mode"] == "register":
+            static_connections = [item for item in reader.connections
+                                  if item.topic == topics.get("tf_static")]
+            static_messages = [reader.deserialize(raw, item.msgtype)
+                               for item, _, raw in reader.messages(connections=static_connections)]
+        if trajectory:
+            pose_settings = profile["pose"]["trajectory"]
+            # T_world_robot = T_world_trajectory_frame * T_trajectory_frame_robot.
+            robot_rotation, robot_translation = _lookup_transform(
+                _static_graph(static_messages), frames["robot"], pose_settings["frame"]
+            )
+            robot_quaternion = quaternion_from_rotation(robot_rotation)
         registration: tuple[Any, Any, np.ndarray, np.ndarray] | None = None
         if source["depth"]["mode"] == "register":
             preload_topics = {
                 topics["depth_camera_info"],
                 topics["color_camera_info"],
-                topics.get("tf_static", ""),
             }
             preload = [item for item in reader.connections if item.topic in preload_topics]
             depth_info = color_info = None
-            static_messages = []
             for item, _, raw in reader.messages(connections=preload):
                 value = reader.deserialize(raw, item.msgtype)
                 if item.topic == topics["depth_camera_info"] and depth_info is None:
                     depth_info = value
                 elif item.topic == topics["color_camera_info"] and color_info is None:
                     color_info = value
-                elif item.topic == topics.get("tf_static"):
-                    static_messages.append(value)
             if depth_info is None or color_info is None:
                 raise ValueError("depth registration requires both CameraInfo streams")
             graph = _static_graph(static_messages)
@@ -250,6 +299,30 @@ def materialize_rosbag(
             output_topic, operation = routes[source_connection.topic]
             message = reader.deserialize(raw, source_connection.msgtype)
             if operation == "sensor":
+                if trajectory:
+                    stamp = message.header.stamp
+                    pose_stamp = stamp.sec * 1_000_000_000 + stamp.nanosec
+                    sample = trajectory.sample(pose_stamp)
+                    if sample is None:
+                        dropped[output_topic] = dropped.get(output_topic, 0) + 1
+                        continue
+                    if pose_stamp not in emitted:
+                        position, quaternion = sample
+                        rotation = _rotation(SimpleNamespace(**dict(
+                            zip(("x", "y", "z", "w"), quaternion)
+                        )))
+                        odometry = _external_odometry(
+                            pose_stamp, position + rotation @ robot_translation,
+                            quaternion_product(quaternion, robot_quaternion), frames, typestore,
+                        )
+                        writer.write(
+                            connection("/input/odometry", "nav_msgs/msg/Odometry"), timestamp,
+                            typestore.serialize_cdr(odometry, "nav_msgs/msg/Odometry"),
+                        )
+                        tf = _transform_from_odometry(odometry, frames["robot"], typestore)
+                        writer.write(connection("/tf", TF_TYPE), timestamp,
+                                     typestore.serialize_cdr(tf, TF_TYPE))
+                        emitted.add(pose_stamp)
                 if source_connection.topic == topics["depth"] and registration:
                     message = register_depth(
                         message,
@@ -275,3 +348,19 @@ def materialize_rosbag(
                     timestamp,
                     typestore.serialize_cdr(tf, TF_TYPE),
                 )
+        if trajectory:
+            if not emitted:
+                raise ValueError("no RGB-D timestamps have usable external trajectory poses")
+            report = {
+                "pose_samples": len(trajectory.timestamps),
+                "coverage_start_ns": trajectory.timestamps[0],
+                "coverage_end_ns": trajectory.timestamps[-1],
+                "max_interpolation_gap_s": trajectory.max_gap_ns / 1e9,
+                "missing_policy": trajectory.missing,
+                "generated_odometry_messages": len(emitted),
+                "dropped_messages": dropped,
+            }
+            (output_path / "trajectory_usage.yaml").write_text(
+                yaml.safe_dump(report, sort_keys=False), encoding="utf-8"
+            )
+            print(f"External trajectory: {len(emitted)} poses; dropped messages: {dropped}")

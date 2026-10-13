@@ -7,7 +7,8 @@ into the image camera, either by the acquisition driver or during preprocessing.
 
 ## Build the toolbox
 
-Configure `.env` following the [README](../README.md), then run:
+Configure `.env` following the [README](../README.md). If the preprocessing
+image is not already available, build it once:
 
 ```bash
 make build PROFILE=preprocess
@@ -94,6 +95,7 @@ range encodings, scale/offset and coordinate conventions before ingestion.
 | --- | --- |
 | `passthrough` | Recorded TF connecting odom → robot → sensor |
 | `recorded_odometry` | `nav_msgs/Odometry` plus sensor extrinsics |
+| `external_trajectory` | External TUM pose file plus recorded static sensor extrinsics |
 | `rtabmap_rgbd` | RGB-D, CameraInfo and sensor extrinsics |
 | `openvins_mono` / `openvins_stereo` | Image(s), IMU, calibrated camera/IMU rig |
 | `zed_tracking` | ZED SVO/SVO2 |
@@ -102,6 +104,40 @@ Passthrough and recorded odometry rewrite ROS 2 bags offline, including depth
 registration when requested. RTAB-Map runs RGB-D odometry, not mapping.
 RTAB-Map/OpenVINS use ROS playback and `depth_image_proc` for registration.
 Only the selected provider writes the odom → robot trajectory.
+
+### External reference trajectories
+
+The `external_trajectory` backend also rewrites ROS 2 bags offline inside
+Docker. Copy `config/preprocessing/external_trajectory.yaml` into your custom
+config directory and supply it as `PREPROCESSOR` to `validate-source` and
+`preprocess`. It accepts TUM rows `timestamp tx ty tz qx qy qz qw`: timestamps
+in seconds, positions in metres and xyzw quaternions representing the tracked
+frame's pose in the trajectory's world frame. Rows must have finite values,
+nonzero quaternions and strictly increasing timestamps.
+
+Set `pose.trajectory.path` to the container-visible file and
+`pose.trajectory.frame` to the **actual tracked frame**. The adapter converts
+that pose into `source.frames.robot` using the recorded static TF tree. Do not
+assume a LiDAR-derived reference tracks the robot body or color camera.
+Trajectory world coordinates are used as the normalized odometry coordinates;
+the adapter does not rebase the first pose or publish `map -> odom`.
+
+`time_offset` is added to trajectory timestamps before matching image-header
+timestamps. Translation uses linear interpolation and orientation uses
+shortest-path SLERP. `max_gap` is a required positive maximum interpolation
+interval in seconds. `missing: error` (default) fails on uncovered image or
+CameraInfo timestamps; `missing: drop` omits these messages outside coverage
+or inside gaps exceeding that limit. Neither policy extrapolates. Sparse
+reference poses can therefore reduce scene coverage substantially, and a
+large gap limit can produce inaccurate interpolated camera motion.
+
+The output contains normalized RGB-D, retained static TF, `odom -> robot` TF
+and pose-only `/input/odometry`; odometry twist and covariance are zero-filled,
+not measured estimates. `trajectory_usage.yaml` reports dropped messages and
+coverage. The external file is archived as `external_trajectory.tum` and its
+SHA256 fingerprint is included in the preprocessing manifest. No additional
+SLAM estimator runs with this backend. It requires a ROS 2 bag and recorded
+static extrinsics; SVO inputs and config-only static transforms are unsupported.
 
 OpenVINS profiles expect `/home/spark/data/calibration/openvins/estimator_config.yaml`.
 Supply your estimator YAML and its referenced camera/IMU calibration files:
@@ -124,6 +160,10 @@ make convert-ros1 INPUT=/home/spark/data/raw/session.bag \
 Adapt a ROS 2 source example to the converted topics and frames, then use
 `INPUT=/home/spark/data/raw/session_ros2` in the validation and preprocessing
 commands below. Conversion cannot supply measurements absent from the recording.
+
+Optional converter flags can be passed through `CONVERT_ARGS`. For example,
+`CONVERT_ARGS='--dst-storage mcap --compress zstd --compress-mode storage'`
+enables MCAP chunk compression without a whole-file decompression copy.
 
 ## Validate and preprocess
 
@@ -192,9 +232,22 @@ make run PROFILE=gpu \
 
 ## Troubleshooting
 
-Repository scripts, packages, example profiles and test fixtures are baked into
-the image. Rebuild after changing them. Custom profiles under
-`data/custom-configs` are read through the data mount and need no rebuild.
+The `preprocess` service bind-mounts `scripts/` and
+`src/spark_3dsg_preprocessing/` read-only. Python modules, package configs and
+launch files use the current checkout without an image rebuild. The package is
+also mounted at its installed ROS share path, and its Python source takes
+priority after ROS setup. Mounting only `ros_ws/src` would not update installed
+launch files or Python imports. Custom profiles under `data/custom-configs`
+are read through the writable data mount.
+
+Changes to runtime dependencies, compiled upstream code, package entry points,
+or files outside these mounts still require updating the image. With the
+`spark-3dsg-preprocess:local` image already available, omit `--build` to reuse it:
+
+```bash
+docker compose --profile preprocess run --rm preprocess COMMAND
+```
+
 For SDK errors, inspect the full
 launch log: the image exposes `/usr/local/zed/lib` and checks SDK permissions
 as `spark`. Running `ldconfig` or the service as root at startup is unnecessary.

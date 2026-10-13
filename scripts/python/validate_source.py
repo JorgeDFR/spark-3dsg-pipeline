@@ -27,6 +27,7 @@ from spark_3dsg_preprocessing.config import (  # noqa: E402
     validate_openvins_calibration,
     validate_pair,
 )
+from spark_3dsg_preprocessing.trajectory import load_trajectory  # noqa: E402
 from validate_bag import sample_messages, topics_from_metadata  # noqa: E402
 
 
@@ -46,7 +47,7 @@ def validate_rosbag(bag: Path, source: dict, profile: dict) -> list[str]:
         required.update(("tf", "tf_static"))
     elif backend == "recorded_odometry":
         required.update(("odometry", "tf_static"))
-    elif backend == "rtabmap_rgbd":
+    elif backend in {"rtabmap_rgbd", "external_trajectory"}:
         required.add("tf_static")
     elif backend == "openvins":
         required.update(("imu", "tf_static"))
@@ -78,6 +79,33 @@ def validate_rosbag(bag: Path, source: dict, profile: dict) -> list[str]:
             errors.append(
                 f"depth encoding {encoding} is not accepted; expected one of {accepted}"
             )
+    if backend == "external_trajectory":
+        from validate_bag import tf_paths_connected
+
+        settings = profile["pose"]["trajectory"]
+        trajectory = load_trajectory(settings)
+        required_paths = (
+            (source["frames"]["robot"], settings["frame"]),
+            (source["frames"]["robot"], source["frames"]["sensor"]),
+        )
+        wanted = {backend_topics["color"], depth_topic}
+        if backend_topics.get("tf_static"):
+            wanted.add(backend_topics["tf_static"])
+        samples, edges, _, error = sample_messages(bag, wanted, 20000, required_paths)
+        if error:
+            errors.append(f"cannot inspect trajectory frame/calibration: {error}")
+        if not tf_paths_connected(edges, required_paths):
+            errors.append("external trajectory frame and camera must connect to robot by recorded static TF")
+        for topic in (backend_topics["color"], depth_topic):
+            if topic not in samples:
+                errors.append(f"cannot sample external trajectory image timestamps: {topic}")
+            else:
+                stamp = samples[topic].header.stamp
+                trajectory.sample(stamp.sec * 1_000_000_000 + stamp.nanosec)
+        gaps = [b - a for a, b in zip(trajectory.timestamps, trajectory.timestamps[1:])]
+        print(f"External trajectory: {len(trajectory.timestamps)} poses, "
+              f"{trajectory.timestamps[0] / 1e9:.9f}–{trajectory.timestamps[-1] / 1e9:.9f}s; "
+              f"largest gap {max(gaps) / 1e9:.3f}s; missing policy {trajectory.missing}")
     return errors
 
 
@@ -152,7 +180,7 @@ def main() -> int:
             if source["input_kind"] == "rosbag2"
             else validate_svo(args.input)
         )
-    except (FileNotFoundError, ValueError) as error:
+    except (OSError, ValueError) as error:
         print(f"source validation failed: {error}", file=sys.stderr)
         return 1
 

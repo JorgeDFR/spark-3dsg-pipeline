@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ SOURCE_TOPIC_TYPES = {
 POSE_BACKENDS = {
     "existing_tf",
     "recorded_odometry",
+    "external_trajectory",
     "rtabmap_rgbd",
     "openvins",
     "zed_tracking",
@@ -141,6 +143,23 @@ def load_preprocessing(path: Path) -> dict[str, Any]:
     pose = config["pose"]
     if not isinstance(pose, dict) or pose.get("backend") not in POSE_BACKENDS:
         raise ValueError(f"invalid pose.backend: {path}")
+    if pose["backend"] == "external_trajectory":
+        trajectory = pose.get("trajectory")
+        if not isinstance(trajectory, dict):
+            raise ValueError(f"external_trajectory requires pose.trajectory: {path}")
+        for key in ("path", "frame"):
+            if not isinstance(trajectory.get(key), str) or not trajectory[key].strip():
+                raise ValueError(f"external trajectory requires an explicit {key}: {path}")
+        if trajectory.get("format", "tum") != "tum":
+            raise ValueError(f"external trajectory format must be tum: {path}")
+        for key in ("max_gap", "time_offset"):
+            value = trajectory.get(key, 0.0 if key == "time_offset" else None)
+            if (not isinstance(value, (int, float)) or isinstance(value, bool)
+                    or not math.isfinite(value) or (key == "max_gap" and value <= 0)):
+                raise ValueError(f"external trajectory {key} must be finite"
+                                 f"{' and positive' if key == 'max_gap' else ''}: {path}")
+        if trajectory.get("missing", "error") not in {"error", "drop"}:
+            raise ValueError(f"external trajectory missing must be error or drop: {path}")
     if pose.get("backend") == "openvins":
         max_cameras = pose.get("max_cameras", 1)
         if (
@@ -172,6 +191,12 @@ def load_preprocessing(path: Path) -> dict[str, Any]:
 def validate_pair(source: dict[str, Any], profile: dict[str, Any]) -> None:
     topics = source["topics"]
     backend = profile["pose"]["backend"]
+    if backend == "external_trajectory":
+        if not topics.get("tf_static"):
+            raise ValueError("external_trajectory requires recorded topics.tf_static")
+        if static_transforms_for_backend(source, backend):
+            raise ValueError("external_trajectory requires recorded extrinsics; "
+                             "config-only static transforms are unsupported")
     if backend == "recorded_odometry" and not topics.get("odometry"):
         raise ValueError("recorded_odometry requires topics.odometry")
     if backend == "existing_tf" and not topics.get("tf"):
@@ -192,6 +217,7 @@ def validate_pair(source: dict[str, Any], profile: dict[str, Any]) -> None:
     if source["input_kind"] == "zed_svo" and backend in {
         "existing_tf",
         "recorded_odometry",
+        "external_trajectory",
     }:
         raise ValueError(f"{backend} cannot provide pose for a zed_svo source")
 

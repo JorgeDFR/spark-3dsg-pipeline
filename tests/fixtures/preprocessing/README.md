@@ -54,8 +54,12 @@ The registration cases reuse the D435i recording without another download.
 Its right infrared camera provides a different optical viewpoint from native
 depth, so these cases actually enable `depth.mode: register`. Infrared serves
 as the image stream for these integration tests. It is not a color-semantic
-mapping benchmark. The matrix covers each supplied pose profile and both
+mapping benchmark. The matrix covers the public-fixture pose profiles and both
 registration execution paths, not every sensor/backend combination.
+The `external_trajectory` profile takes a user-supplied TUM file; its
+interpolation, gap/coverage policies, static frame conversion and serialized
+bag output have synthetic repository-only tests in
+[`test_external_trajectory.py`](../../../tests/unit/test_external_trajectory.py).
 
 Each output must pass `validate_bag.py` (image/camera/TF contract) and
 `validate_preprocessing_output.py` (nonempty normalized RGB-D, CameraInfo,

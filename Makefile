@@ -23,6 +23,7 @@ PREPROCESS_ARGS ?=
 PREPROCESS_DATA_ARGS ?=
 PREPROCESS_TEST_ARGS ?=
 ROS2_BAG ?=
+CONVERT_ARGS ?=
 
 ifeq ($(filter $(PROFILE),core gpu preprocess all),)
 $(error PROFILE must be core, gpu, preprocess, or all (build only))
@@ -82,7 +83,7 @@ convert-ros1: ## Convert INPUT ROS 1 bag to ROS2_BAG in the raw data directory
 	@test -n "$(INPUT)" || { echo "INPUT is required (container path to a ROS 1 .bag file)" >&2; exit 2; }
 	@test -n "$(ROS2_BAG)" || { echo "ROS2_BAG is required (container path for a new ROS 2 bag directory)" >&2; exit 2; }
 	@$(COMPOSE) --profile preprocess run --rm preprocess \
-		rosbags-convert --src "$(INPUT)" --dst "$(ROS2_BAG)"
+		rosbags-convert --src "$(INPUT)" --dst "$(ROS2_BAG)" $(CONVERT_ARGS)
 
 inspect: ## Inspect DSG=/home/spark/output/.../dsg.json
 	@test -n "$(DSG)" || { echo "DSG is required (container path, normally $(CONTAINER_HOME)/output/...)" >&2; exit 2; }

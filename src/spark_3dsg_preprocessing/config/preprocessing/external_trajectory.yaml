@@ -1,0 +1,18 @@
+name: external_trajectory
+description: Offline RGB-D normalization with an externally supplied TUM trajectory
+pose:
+  backend: external_trajectory
+  trajectory:
+    format: tum
+    path: /home/spark/data/raw/session/ground-truth.txt
+    # Set the actual tracked frame, not merely the desired output frame.
+    frame: base_link
+    # Added to file timestamps to place them in the image-header time domain.
+    time_offset: 0.0
+    max_gap: 1.0
+    # error: fail on an uncovered image; drop: omit RGB-D/calibration messages
+    # outside coverage or inside gaps greater than max_gap. Never extrapolate.
+    missing: error
+synchronization:
+  approximate: false
+  queue_size: 20

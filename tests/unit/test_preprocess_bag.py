@@ -142,3 +142,51 @@ def test_manifest_preserves_source_settings(tmp_path):
     assert manifest["resolved_source_config_sha256"] == hashlib.sha256(
         yaml.safe_dump(source, sort_keys=True).encode("utf-8")
     ).hexdigest()
+
+
+def test_external_manifest_archives_and_fingerprints_reference(tmp_path):
+    import hashlib
+    import yaml
+
+    source_path = resolve_config("generic_rgbd", "sources")
+    source = load_source(source_path)
+    profile_path = resolve_config("external_trajectory", "preprocessing")
+    profile = load_preprocessing(profile_path)
+    trajectory = tmp_path / "poses.txt"
+    trajectory.write_text("1 0 0 0 0 0 0 1\n2 1 0 0 0 0 0 1\n")
+    profile["pose"]["trajectory"]["path"] = str(trajectory)
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    output = tmp_path / "out"
+    output.mkdir()
+    preprocess_bag.write_manifest(output, raw, source_path, profile_path, source, profile)
+    manifest = yaml.safe_load((output / "preprocessing_manifest.yaml").read_text())
+    assert manifest["external_trajectory"]["sha256"] == hashlib.sha256(trajectory.read_bytes()).hexdigest()
+    assert (output / "external_trajectory.tum").read_bytes() == trajectory.read_bytes()
+
+
+def test_external_backend_uses_offline_orchestration(monkeypatch, tmp_path):
+    import yaml
+
+    calls = []
+    def run(command, **kwargs):
+        calls.append(Path(command[1]).name)
+        return SimpleNamespace(returncode=0, stdout="passed\n", stderr="")
+    def materialize(input_path, output_path, source, profile):
+        assert profile["pose"]["backend"] == "external_trajectory"
+        output_path.mkdir()
+    monkeypatch.setattr(preprocess_bag.subprocess, "run", run)
+    monkeypatch.setattr(preprocess_bag, "materialize_rosbag", materialize)
+    trajectory = tmp_path / "poses.txt"
+    trajectory.write_text("1 0 0 0 0 0 0 1\n2 1 0 0 0 0 0 1\n")
+    profile = load_preprocessing(resolve_config("external_trajectory", "preprocessing"))
+    profile["pose"]["trajectory"]["path"] = str(trajectory)
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(yaml.safe_dump(profile))
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    output = tmp_path / "normalized"
+    preprocess_bag.run(Namespace(source="generic_rgbd", preprocessor=str(profile_path),
+                                 input=raw, output=output, duration=None))
+    assert calls == ["validate_source.py", "validate_bag.py"]
+    assert (output / "external_trajectory.tum").is_file()

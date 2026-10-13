@@ -82,6 +82,12 @@ Follow the [preprocessing guide](PREPROCESSING.md) to:
 4. Run `make preprocess` with an output such as
    `/home/spark/data/normalized/session`.
 
+If a reference trajectory is supplied separately from the bag, the
+[`external_trajectory` backend](PREPROCESSING.md#external-reference-trajectories)
+can use a TUM text file as the pose source. Configure its actual tracked frame,
+timestamp offset and interpolation-gap policy; supplying poses does not change
+which semantic mapping recipe you select in step 4.
+
 That guide includes custom-config commands, ROS 1 conversion, and SVO/SVO2
 playback. Preprocessing produces a checked ROS 2 bag and a matching
 `dataset.yaml`. Use that generated adapter for mapping so frames and depth

@@ -281,6 +281,16 @@ def write_manifest(
         "frames": normalized_frames(source, profile),
         "validation": "passed",
     }
+    if profile["pose"]["backend"] == "external_trajectory":
+        trajectory_path = Path(profile["pose"]["trajectory"]["path"]).expanduser()
+        manifest["external_trajectory"] = {
+            "path": str(trajectory_path),
+            "sha256": sha256(trajectory_path),
+            "bytes": trajectory_path.stat().st_size,
+            "frame": profile["pose"]["trajectory"]["frame"],
+            "archived_file": "external_trajectory.tum",
+        }
+        shutil.copy2(trajectory_path, output / "external_trajectory.tum")
     (output / "preprocessing_manifest.yaml").write_text(
         yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8"
     )
@@ -374,6 +384,7 @@ def run(args: argparse.Namespace) -> None:
     if source["input_kind"] == "rosbag2" and backend in {
         "existing_tf",
         "recorded_odometry",
+        "external_trajectory",
     }:
         materialize_rosbag(input_path, temporary, source, profile)
         logs = temporary / "logs"
@@ -501,7 +512,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         run(args)
-    except (FileNotFoundError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         print(f"preprocessing failed: {error}", file=sys.stderr)
         return 1
     return 0

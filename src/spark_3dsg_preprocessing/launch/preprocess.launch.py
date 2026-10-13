@@ -36,6 +36,8 @@ def _setup(context):
     frames = source["frames"]
     pose = profile["pose"]
     backend = pose["backend"]
+    if backend == "external_trajectory":
+        raise ValueError("external_trajectory is an offline backend; use make preprocess")
     actions = []
     source_action = None
 

@@ -65,7 +65,7 @@ def test_force_cleanup_is_scoped_to_one_validation_case(tmp_path):
     assert unrelated.is_dir()
 
 
-def test_full_suite_covers_every_profile_and_both_registration_paths():
+def test_full_suite_covers_public_data_profiles_and_both_registration_paths():
     from argparse import Namespace
     from preprocessing_config import config_directory, resolve_config
     from spark_3dsg_preprocessing.config import load_source
@@ -73,7 +73,10 @@ def test_full_suite_covers_every_profile_and_both_registration_paths():
     names = run_preprocessing_tests.selected_cases(Namespace(case=None, suite="all"))
     cases = [run_preprocessing_tests.CASES[name] for name in names]
     profiles = {path.stem for path in config_directory("preprocessing").glob("*.yaml")}
-    assert {Path(case.preprocessor).stem for case in cases} == profiles
+    # External TUM input is user-supplied, not one of these downloaded fixtures.
+    # Its interpolation/frame conversion and bag round-trip have synthetic unit
+    # coverage in test_external_trajectory.py; retain full public-fixture coverage.
+    assert {Path(case.preprocessor).stem for case in cases} == profiles - {"external_trajectory"}
     registering = {
         Path(case.preprocessor).stem for case in cases
         if load_source(resolve_config(case.source.replace(run_preprocessing_tests.CONTAINER_ROOT, str(run_preprocessing_tests.ROOT)), "sources"))["depth"]["mode"] == "register"
